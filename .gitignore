@@ -1,0 +1,52 @@
+# REPOZYTORIUM JEST PUBLICZNE.
+# Idzie do niego wyłącznie katalog app/ — kod aplikacji. Wszystko poniżej
+# zostaje na dysku: materiały źródłowe objęte cudzym prawem autorskim,
+# dane finansowe, notatki robocze i pliki, które identyfikują właściciela.
+
+# ŹRÓDŁA — wszystko, co pobrane z zewnątrz, tylko lokalnie
+zrodla/
+rozdzialy/
+spis_tresci.md
+transkrypcja*.md
+transkypcja*.md
+
+# DANE PRYWATNE — nigdy do repo
+prywatne/
+wyciagi/
+osobiste/
+firmowe/
+hipoteka/
+*.csv
+*.xlsx
+*.pdf
+profil/**/*.local.md
+**/*.private.md
+
+# Kopie planu robione przez `npm run baza plan-zapisz` — to cały plan finansowy
+app/plan-kopia-*.json
+app/plan.json
+
+# Sekrety
+.env
+.env.*
+!.env.example
+*firebase*adminsdk*.json
+serviceAccountKey.json
+
+# Ustawienia narzędzi — zawierają ścieżki z tej maszyny.
+# Nie polegaj na globalnym gitignore: na innej maszynie go nie ma.
+.claude/
+
+# NOTATKI ROBOCZE — identyfikują właściciela i zawierają liczby z planu.
+# Zostają na dysku i działają normalnie, po prostu nie idą do publicznego repo.
+CLAUDE.md
+INTERFEJS-*.md
+
+# Typowe
+node_modules/
+.next/
+out/
+dist/
+build/
+.DS_Store
+Thumbs.db

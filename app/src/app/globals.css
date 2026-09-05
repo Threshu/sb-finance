@@ -1,0 +1,1311 @@
+:root {
+  --bg: #131110;
+  --bg-2: #1a1714;
+  --surface: #201c18;
+  --raised: #2a251f;
+  --line: #38312a;
+  --line-soft: #2b2620;
+
+  --ink: #f4efe6;
+  --dim: #b3a897;
+  --faint: #8c8171;
+
+  --brass: #d9a441;
+  --brass-deep: #a87c2b;
+  --brass-glow: rgba(217, 164, 65, 0.16);
+
+  --sage: #8aa97b;
+  --rust: #c26b45;
+
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 14px;
+
+  --gap: 18px;
+  --pad: 20px;
+
+  /* Skala typografii — kilka jasnych kroków zamiast przypadkowych rozmiarów.
+     Każdy krok ma jedną rolę, żeby nie mnożyć wariantów przy każdej karcie. */
+  --fs-micro: 11px;   /* etykiety caps, tagi, znaczniki czasu */
+  --fs-xs: 12.5px;    /* podpisy, notki, drugorzędne detale */
+  --fs-sm: 13.5px;    /* wiersze drugorzędne, legendy */
+  --fs-base: 15px;    /* treść podstawowa — wartości, opisy */
+  --fs-md: 16px;      /* tytuły wewnątrz kart (kroki, kamienie) */
+  --fs-lg: 19px;      /* liczby średniej wagi (etapy przepływu) */
+  --fs-xl: 25px;      /* nagłówki kart, tytuł bramy */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+  position: relative;
+}
+
+/* Ziarno — delikatna faktura, żeby tło nie było płaskie. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+}
+
+/* Poświata u góry — kierunek światła dla całej strony. */
+body::after {
+  content: '';
+  position: fixed;
+  top: -220px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(900px, 130vw);
+  height: 460px;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(ellipse at center, var(--brass-glow), transparent 68%);
+}
+
+/*
+ * Marginesy z `env(safe-area-inset-*)`, bo w trybie standalone (ikona z
+ * ekranu głównego) strona rysuje się pod paskiem stanu — `viewportFit:
+ * 'cover'` w layoucie oddaje nam cały ekran razem z wcięciem na zegarek
+ * i baterię. W przeglądarce i na desktopie te wartości są zerowe.
+ */
+.powloka {
+  position: relative;
+  z-index: 1;
+  max-width: 1720px;
+  margin: 0 auto;
+  padding: calc(22px + env(safe-area-inset-top)) calc(var(--pad) + env(safe-area-inset-right))
+    calc(64px + env(safe-area-inset-bottom)) calc(var(--pad) + env(safe-area-inset-left));
+}
+
+/* ── Układ panelu ───────────────────────────────────────── */
+
+/* Domyślnie telefon: wszystko jedną kolumną. */
+.panel {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: 1fr;
+  /* Kolumny zaczynają się u góry i mają naturalną wysokość — bez tego
+     krótsza rozciągnęłaby się do najwyższej i zostałaby w niej pustka. */
+  align-items: start;
+}
+
+.kolumna {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-width: 0;
+}
+
+/* Odstępy robi gap siatki, karty nie dokładają własnego marginesu. */
+.kolumna > .karta {
+  margin-bottom: 0;
+}
+
+/* Tablet i wąski desktop: dwie kolumny, szeroka zajmuje pełny wiersz. */
+@media (min-width: 900px) {
+  .panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kolumna.szeroka { grid-column: 1 / -1; }
+}
+
+/* Pełny desktop: trzy kolumny, lewa szersza (mieści miernik i przepływ). */
+@media (min-width: 1360px) {
+  .panel { grid-template-columns: 1.35fr 1fr 1fr; }
+  .kolumna.szeroka { grid-column: auto; }
+  .karta { padding: 17px 18px; }
+  .powloka { padding-top: calc(18px + env(safe-area-inset-top)); }
+}
+
+/* ── Typografia ─────────────────────────────────────────── */
+
+
+/* Klasa liczbowa. Nie monospace — Inter z cyframi tabelarycznymi trzyma
+   kolumny równo, a przy większych kwotach wygląda jak panel finansowy,
+   nie jak terminal. */
+.mono {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: -0.005em;
+}
+
+/* Mono zostaje tam, gdzie ma sens: drobne etykiety techniczne. */
+.etykieta {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ── Nagłówek ───────────────────────────────────────────── */
+
+.naglowek {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 22px;
+  margin-bottom: 26px;
+  border-bottom: 1px solid var(--line);
+}
+
+.naglowek h1 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: var(--fs-xl);
+  font-weight: 400;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.naglowek h1 em {
+  font-style: italic;
+  color: var(--brass);
+}
+
+/* ── Karty ──────────────────────────────────────────────── */
+
+.karta {
+  background: linear-gradient(180deg, var(--surface), var(--bg-2));
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--pad);
+  margin-bottom: var(--gap);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 32px -24px rgba(0, 0, 0, 0.9);
+}
+
+/* Nagłówek karty jest zawsze klikalny — cały pasek, nie sama strzałka,
+   bo na telefonie mały cel dotyku to gwarantowana pomyłka. Reszta karty
+   (dodatek: licznik, przycisk) zostaje poza przyciskiem, żeby nie wyszedł
+   przycisk w przycisku. Tytuł jest tu większy i bez capsów mimo że gdzie
+   indziej ".etykieta" jest drobną czcionką — to jedyny tekst na karcie,
+   który coś robi po kliknięciu, więc ma wyglądać jak przycisk, nie jak
+   podpis. */
+.karta-tytul {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  padding: 6px;
+  /* Ujemny margines ze WSZYSTKICH stron, nie tylko z góry: padding ma dawać
+     tło pod kursorem i większy cel dotyku, ale nie ruszać układu. Gdy
+     kompensata była niesymetryczna, nagłówek wisiał 6 px wyżej, niż powinien,
+     co po zwinięciu karty było widać jako brak wyśrodkowania. */
+  margin: -6px;
+  border-radius: var(--r-md);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 160ms ease;
+}
+
+/* W pasku wyboru miesiąca tytuł stoi między strzałkami nawigacji, więc nie
+   może wisieć na własnym marginesie — inaczej rozjeżdża się z nimi w pionie. */
+.wybor-miesiaca .karta-tytul { margin: 0; }
+
+.karta-tytul .etykieta {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+}
+
+.karta-tytul:hover { background: var(--raised); }
+
+.karta-tytul:hover .etykieta { color: var(--brass); }
+
+.karta-tytul:focus-visible {
+  outline: 2px solid var(--brass-deep);
+  outline-offset: 2px;
+}
+
+/* Strzałka dostaje własną odznakę — okrągły przycisk, nie goły znaczek —
+   żeby czytała się jako coś klikalnego, nie jako dekoracja przy tytule. */
+.karta-tytul-ikona {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  color: var(--dim);
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.karta-tytul:hover .karta-tytul-ikona {
+  background: var(--brass-glow);
+  border-color: var(--brass-deep);
+  color: var(--brass);
+}
+
+.strzalka-karty {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Zwijanie treści karty ──────────────────────────────────
+   Sztuczka na grid zamiast max-height: 0↔1fr da się animować bez znajomości
+   rzeczywistej wysokości treści, a ta jest bardzo różna — od jednego wiersza
+   po wykres. Wewnętrzny div z overflow:hidden przycina w trakcie animacji. */
+.karta-tresc {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.karta-tresc[data-zwiniete='true'] {
+  grid-template-rows: 0fr;
+}
+
+.karta-tresc > div {
+  overflow: hidden;
+  transition: opacity 200ms ease;
+}
+
+.karta-tresc[data-zwiniete='true'] > div {
+  opacity: 0;
+}
+
+/* Odstęp pod nagłówkiem ma sens tylko wtedy, gdy pod nim coś jest. Po
+   zwinięciu zostawałby pustym pasem nad dolnym paddingiem karty. Selektor
+   idzie po pierwszym dziecku, bo nagłówkiem bywa też pasek wyboru miesiąca,
+   nie tylko .karta-glowka. */
+.karta > :first-child {
+  transition: margin-bottom 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.karta[data-zwiniete='true'] > :first-child {
+  margin-bottom: 0;
+}
+
+/* ── Miernik poduszki ───────────────────────────────────── */
+
+.hero-kwota {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.hero-kwota .duza {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(36px, 10vw, 50px);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.hero-kwota .cel {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  color: var(--faint);
+}
+
+.hero-podpis {
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  margin: 0 0 22px;
+}
+
+.hero-podpis strong {
+  color: var(--brass);
+  font-weight: 500;
+}
+
+/* ── Wiersze danych ─────────────────────────────────────── */
+
+.wiersz {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.wiersz:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.wiersz .opis {
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  min-width: 0;
+}
+
+.wiersz .opis .glowny {
+  color: var(--ink);
+  display: block;
+  font-size: var(--fs-base);
+}
+
+.wiersz .wartosc {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+  font-size: var(--fs-base);
+}
+
+.wartosc.dodatnia { color: var(--sage); }
+.wartosc.ostrzezenie { color: var(--rust); }
+.wartosc.akcent { color: var(--brass); }
+
+/* ── Kroki miesiąca ─────────────────────────────────────── */
+
+.krok {
+  display: flex;
+  gap: 13px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 12px 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.krok:last-of-type { border-bottom: none; }
+
+.krok:disabled { cursor: default; }
+
+.pole {
+  flex-shrink: 0;
+  width: 21px;
+  height: 21px;
+  margin-top: 1px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+.krok[data-zrobione='true'] .pole {
+  background: var(--sage);
+  border-color: var(--sage);
+}
+
+.pole svg {
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 180ms ease, transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.krok[data-zrobione='true'] .pole svg {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.krok .tresc { min-width: 0; }
+
+.krok .tytul {
+  display: block;
+  font-size: var(--fs-base);
+  transition: color 180ms ease;
+}
+
+.krok[data-zrobione='true'] .tytul {
+  color: var(--faint);
+  text-decoration: line-through;
+  text-decoration-color: var(--line);
+}
+
+.krok .podpis {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--faint);
+  line-height: 1.45;
+  margin-top: 1px;
+}
+
+/* ── Formularze ─────────────────────────────────────────── */
+
+.formularz {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+input[type='text'],
+input[type='date'],
+input[type='number'],
+select {
+  font-variant-numeric: tabular-nums;
+  flex: 1 1 110px;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 11px 13px;
+  color: var(--ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--fs-base);
+}
+
+select { cursor: pointer; }
+
+input::placeholder { color: var(--faint); }
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--brass-deep);
+  box-shadow: 0 0 0 3px var(--brass-glow);
+}
+
+/* Zwykła czcionka i normalna wielkość liter, jak tytuły kart i chipy.
+   Mono w wersalikach zostało z wcześniejszej wersji i było już jedynym
+   takim miejscem w apce — przycisk odstawał od wszystkiego dookoła. */
+.przycisk {
+  background: var(--brass);
+  color: #211a0c;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  padding: 10px 16px;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: normal;
+  cursor: pointer;
+  transition: filter 160ms ease, transform 120ms ease;
+}
+
+.przycisk:hover { filter: brightness(1.1); }
+.przycisk:active { transform: translateY(1px); }
+
+/* Wyłączony przycisk główny zostaje złoty, tylko ciemniejszy. Wcześniej
+   robiliśmy go szarym i wtedy wyglądał identycznie jak przycisk poboczny —
+   znikała informacja, która akcja jest tą właściwą. Nie przez `opacity`:
+   na złocie ciemny tekst i tło gasną razem i robi się nieczytelna plama. */
+.przycisk:disabled {
+  cursor: default;
+  background: var(--brass-deep);
+  color: #2a2113;
+}
+
+.przycisk.cichy:disabled {
+  background: transparent;
+  color: var(--faint);
+}
+
+.przycisk.cichy {
+  background: transparent;
+  color: var(--dim);
+  border: 1px solid var(--line);
+}
+
+.przycisk-usun {
+  background: none;
+  border: none;
+  color: var(--faint);
+  cursor: pointer;
+  font-size: var(--fs-md);
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+}
+
+.przycisk-usun:hover { color: var(--rust); background: var(--raised); }
+
+/* ── Pasek budżetu ──────────────────────────────────────── */
+
+.pasek {
+  display: block;
+  height: 8px;
+  background: var(--raised);
+  border-radius: 99px;
+  overflow: hidden;
+  margin: 12px 0 8px;
+}
+
+.pasek span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--sage), #a8c398);
+  transition: width 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pasek.przekroczony span {
+  background: linear-gradient(90deg, var(--rust), #d98a66);
+}
+
+/* ── Daty ───────────────────────────────────────────────── */
+
+.data-waga {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.data-waga.wysoka { background: var(--rust); }
+.data-waga.srednia { background: var(--brass); }
+.data-waga.niska { background: var(--faint); }
+
+/* ── Drobne ─────────────────────────────────────────────── */
+
+.notka {
+  color: var(--faint);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  margin: 12px 0 0;
+}
+
+.lista-pusta {
+  color: var(--faint);
+  font-size: var(--fs-sm);
+  padding: 10px 0;
+}
+
+.stopka {
+  margin-top: 34px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── Główka karty ───────────────────────────────────────── */
+
+.karta-glowka {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  /* 20, nie 14: przycisk tytułu zjada 6 px ujemnym marginesem u dołu,
+     więc na oko zostaje z tego 14 px odstępu do treści. */
+  margin-bottom: 20px;
+}
+
+.licznik {
+  font-size: var(--fs-micro);
+  color: var(--faint);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.licznik.komplet { color: var(--sage); }
+
+.pasek-krokow {
+  height: 2px;
+  background: var(--raised);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.pasek-krokow span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--brass-deep), var(--brass));
+  transition: width 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Fazy kroków ────────────────────────────────────────── */
+
+.notka.wyzwalacz {
+  margin-top: 12px;
+  padding-left: 11px;
+  border-left: 2px solid var(--brass-deep);
+  color: var(--dim);
+}
+
+.faza { margin-top: 18px; }
+
+/* Nagłówki faz to zdania („Zostaw na firmowym — to nie są twoje pieniądze"),
+   nie etykiety. Ta sama poprawka co przy .etap-naglowek: zwykła czcionka,
+   bez wersalików. Kreska zostaje, bo oddziela grupy kroków. */
+.faza-tytul {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--dim);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 2px;
+}
+
+/* ── Kroki: kwoty i trasy ───────────────────────────────── */
+
+.krok-glowka {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.krok-glowka .tytul { display: inline; }
+
+.kwota-znacznik {
+  font-size: var(--fs-sm);
+  color: var(--brass);
+  white-space: nowrap;
+}
+
+.kiedy {
+  font-family: var(--font-mono), monospace;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  color: var(--rust);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.trasa {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}
+
+.konto {
+  font-family: var(--font-mono), monospace;
+  font-size: var(--fs-micro);
+  color: var(--dim);
+  background: var(--raised);
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+}
+
+.konto.docelowe { color: var(--ink); }
+
+.strzalka { color: var(--faint); flex-shrink: 0; }
+
+.krok .uwaga,
+.pozycja .uwaga {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--brass-deep);
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.rozbicie {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 11px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+}
+
+.pozycja {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.pozycja .kwota {
+  font-size: var(--fs-sm);
+  color: var(--brass);
+  min-width: 76px;
+}
+
+.pozycja .po-co {
+  font-size: var(--fs-xs);
+  color: var(--faint);
+  flex-basis: 100%;
+}
+
+.krok[data-zrobione='true'] .rozbicie,
+.krok[data-zrobione='true'] .trasa {
+  opacity: 0.45;
+}
+
+/* ── Przepływ miesiąca ──────────────────────────────────── */
+
+.przeplyw {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.etap {
+  position: relative;
+  padding: 13px 0 13px 18px;
+  border-left: 2px solid var(--line);
+}
+
+.etap.zrodlo { border-left-color: var(--brass-deep); }
+.etap.zostaje { border-left-color: var(--brass); }
+.etap.rozdzial { border-left-color: var(--sage); }
+
+.etap::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 17px;
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--line);
+}
+
+.etap.zrodlo::before { background: var(--brass-deep); }
+.etap.zostaje::before { background: var(--brass); }
+.etap.rozdzial::before { background: var(--sage); }
+
+.etap-kwota {
+  display: block;
+  font-size: var(--fs-lg);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.etap-kwota.akcent { color: var(--brass); }
+
+.etap-opis {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--dim);
+  margin-top: 1px;
+}
+
+/* To są zdania, nie etykiety — „Najpierw odkładasz, to nie są twoje pieniądze"
+   coś znaczy, więc nie ma powodu dusić tego w drobnych capsach z rozstrzeloną
+   spacją. Czcionka jak w reszcie treści, tylko przygaszona. */
+.etap-naglowek {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--dim);
+  margin-bottom: 8px;
+}
+
+.wiersz-przeplyw {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.wiersz-przeplyw:last-child { border-bottom: none; padding-bottom: 0; }
+
+.wiersz-przeplyw .opis {
+  font-size: var(--fs-sm);
+  color: var(--dim);
+  min-width: 0;
+}
+
+.wiersz-przeplyw .opis .glowny {
+  display: block;
+  color: var(--ink);
+  font-size: var(--fs-base);
+}
+
+.wiersz-przeplyw .wartosc {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-base);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.wiersz-przeplyw.cel .wartosc { color: var(--brass); }
+
+.wiersz-przeplyw .termin {
+  display: block;
+  font-size: var(--fs-micro);
+  color: var(--faint);
+  letter-spacing: 0.06em;
+}
+
+.notka.roznica { color: var(--rust); }
+
+/* ── Kamienie milowe ────────────────────────────────────── */
+
+.kamienie {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.kamien {
+  position: relative;
+  display: flex;
+  gap: 13px;
+  padding: 0 0 18px;
+}
+
+.kamien:last-child { padding-bottom: 0; }
+
+/* Pionowa nitka łącząca znaczniki. */
+.kamien::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 25px;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+
+.kamien:last-child::before { display: none; }
+
+.kamien .znacznik {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: 21px;
+  height: 21px;
+  border-radius: 99px;
+  border: 1.5px solid var(--line);
+  background: var(--bg-2);
+  display: grid;
+  place-items: center;
+  transition: background 200ms ease, border-color 200ms ease;
+}
+
+.kamien[data-osiagniety='true'] .znacznik {
+  background: var(--sage);
+  border-color: var(--sage);
+}
+
+/* Kropka w środku zamiast poświaty. `box-shadow` bez rozmycia dawał sztywny
+   pierścień, przez który przechodziła nitka osi czasu — wyglądał na krzywy. */
+.kamien[data-nastepny='true'] .znacznik {
+  border-color: var(--brass);
+}
+
+.kamien[data-nastepny='true'] .znacznik::after {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 99px;
+  background: var(--brass);
+}
+
+.kamien-tresc { min-width: 0; flex: 1; }
+
+.kamien-glowka {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.kamien-glowka .tytul { font-size: var(--fs-base); }
+
+.kamien[data-osiagniety='false'] .kamien-glowka .tytul { color: var(--dim); }
+.kamien[data-nastepny='true'] .kamien-glowka .tytul { color: var(--ink); }
+
+.kamien .prog {
+  font-size: var(--fs-sm);
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.kamien[data-osiagniety='true'] .prog { color: var(--sage); }
+.kamien[data-nastepny='true'] .prog { color: var(--brass); }
+
+.kamien .podpis {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--faint);
+  line-height: 1.45;
+  margin-top: 2px;
+}
+
+.pasek.maly {
+  height: 4px;
+  margin: 10px 0 6px;
+}
+
+.kamien[data-nastepny='true'] .pasek span {
+  background: linear-gradient(90deg, var(--brass-deep), var(--brass));
+}
+
+.kamien-status {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--dim);
+}
+
+.kamien-status strong {
+  color: var(--brass);
+  font-weight: 500;
+}
+
+.warstwy {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.warstwy .faza-tytul { border-bottom: none; margin-bottom: 6px; }
+
+/* ── Brama: logowanie i wgranie planu ───────────────────── */
+
+.brama {
+  max-width: 560px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.brama-tytul {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: var(--fs-xl);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  margin: 10px 0 6px;
+}
+
+.brama code {
+  font-family: var(--font-mono), monospace;
+  font-size: var(--fs-xs);
+  background: var(--raised);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+}
+
+.bledy {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--rust);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+
+.bledy ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+
+/* ── Zakładki: panel / zakupy ───────────────────────────── */
+
+.zakladki {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+}
+
+.zakladka {
+  background: none;
+  border: none;
+  border-radius: 99px;
+  padding: 7px 15px;
+  cursor: pointer;
+  color: var(--dim);
+  font-family: var(--font-mono), monospace;
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.zakladka:hover { color: var(--ink); }
+
+.zakladka[aria-selected='true'] {
+  background: var(--raised);
+  color: var(--brass);
+}
+
+/* ── Wybór miesiąca ─────────────────────────────────────── */
+
+.wybor-miesiaca {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.wybor-miesiaca .przycisk {
+  padding: 4px 13px;
+  font-size: var(--fs-md);
+  line-height: 1.2;
+}
+
+/* ── Legenda i kropki serii ─────────────────────────────── */
+
+.kropka {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  margin-right: 7px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 11px;
+}
+
+.legenda-poz {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+}
+
+.legenda-poz .kropka { margin-right: 0; }
+
+.legenda-nazwa { color: var(--dim); }
+
+.legenda-kwota {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Pasek złożony: udział typów wydatków ───────────────────
+   Odstęp między częściami robi tło strony, nie obramowanie — granica
+   zostaje widoczna także przy wymuszonych kolorach i na wydruku. */
+
+.pasek-zlozony {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  margin-top: 6px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--raised);
+}
+
+.pasek-zlozony span {
+  display: block;
+  min-width: 3px;
+  transition: flex-grow 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Słupki kategorii ───────────────────────────────────── */
+
+.slupki {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.slupek-glowka {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 5px;
+}
+
+.slupek-nazwa {
+  font-size: var(--fs-base);
+  color: var(--ink);
+  min-width: 0;
+}
+
+.slupek-kwota {
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.slupek-udzial { color: var(--faint); font-size: var(--fs-xs); }
+
+.slupek-tor {
+  display: block;
+  height: 8px;
+  background: var(--raised);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.slupek-tor span {
+  display: block;
+  height: 100%;
+  min-width: 4px;
+  border-radius: 0 4px 4px 0;
+  transition: width 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.slupek-podpis {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--fs-xs);
+  color: var(--faint);
+}
+
+.notka code {
+  font-family: var(--font-mono), monospace;
+  font-size: var(--fs-xs);
+  background: var(--raised);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+}
+
+.pojawia {
+  animation: pojaw 620ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@keyframes pojaw {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Chipy: kafelki częstych wydatków i podpowiedzi sklepu ──
+   Kafelek to skrót, nie zapis — wypełnia formularz i zostawia decyzję przy
+   tobie. Kwota nigdy się z niego nie bierze, dlatego kafelek jej nie pokazuje:
+   liczba na przycisku wyglądałaby jak cena już zatwierdzona. */
+.chipy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.chipy-etykieta {
+  font-family: var(--font-mono), monospace;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-right: 2px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 7px 11px;
+  color: var(--ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.chip:hover {
+  border-color: var(--brass-deep);
+  background: var(--surface);
+}
+
+.chip:active { transform: translateY(1px); }
+
+.chip:focus-visible {
+  outline: none;
+  border-color: var(--brass-deep);
+  box-shadow: 0 0 0 3px var(--brass-glow);
+}
+
+/* Sklep jest dopiskiem do opisu, nie równorzędną etykietą. */
+.chip-sklep {
+  font-family: var(--font-mono), monospace;
+  font-size: var(--fs-micro);
+  color: var(--dim);
+}
+
+/* Podpowiedź sklepu zmienia jedno pole, kafelek wypełnia cały formularz —
+   dlatego jest lżejsza wizualnie. */
+.chip.drugi {
+  background: transparent;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  padding: 5px 10px;
+}
+
+/* Kalendarz i strzałki pola daty mają iść za ciemnym motywem, nie za systemem. */
+input[type='date'] { color-scheme: dark; }
+
+/* ── Filtr kategorii: zakładki nad listą wydatków ───────────
+   Ten sam chip co kafelki wyżej, ale jako przełącznik — stąd centrowanie
+   (kropka typu obok tekstu ma stać równo, nie na linii bazowej tekstu)
+   i osobny stan wybrany, wyraźnie odróżniony od zwykłego hover. */
+.filtr-kategorii {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 16px;
+}
+
+.chip.filtr {
+  align-items: center;
+  font-size: var(--fs-xs);
+  padding: 6px 12px;
+}
+
+.chip.wybrany {
+  background: var(--brass-glow);
+  border-color: var(--brass-deep);
+  color: var(--ink);
+}
+
+.chip-kwota {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.chip.wybrany .chip-kwota { color: var(--brass); }
+
+.chip-licznik {
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.chip-licznik::before { content: '· '; }
+
+.chip.wybrany .chip-licznik { color: var(--brass-deep); }

@@ -1,0 +1,37 @@
+rules_version = '2';
+
+// Każdy czyta i zapisuje wyłącznie własne dokumenty.
+// Bez tego dane finansowe byłyby dostępne dla dowolnej zalogowanej osoby.
+//
+// Struktura:
+//   uzytkownicy/{uid}                  profil — ustawienia, znacznik czasu
+//   uzytkownicy/{uid}/wydatki/{id}     jeden wydatek = jeden dokument
+//   uzytkownicy/{uid}/wplaty/{id}
+//   uzytkownicy/{uid}/kroki/{RRRR-MM}  odhaczone kroki miesiąca
+//   plany/{uid}                        plan: kwoty, daty, kroki
+//
+// UWAGA: reguła na dokumencie NIE obejmuje jego podkolekcji. Zagnieżdżony
+// `match /{document=**}` jest tu konieczny — bez niego wszystko poniżej
+// `uzytkownicy/{uid}` wpadłoby pod końcową blokadę i baza odrzuciłaby zapisy.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /uzytkownicy/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      match /{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // Osobna kolekcja, bo plan zmienia się rzadko i czyta się go w całości.
+    match /plany/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Wszystko poza powyższym jest zamknięte.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

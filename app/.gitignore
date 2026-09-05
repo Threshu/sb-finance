@@ -1,0 +1,9 @@
+node_modules/
+.next/
+out/
+
+# Konfiguracja Firebase — identyfikuje twój projekt, zostaje lokalnie
+.env.local
+.firebaserc
+.firebase/
+*.tsbuildinfo

@@ -1,0 +1,17 @@
+{
+  "name": "Finansowa Forteca",
+  "short_name": "Forteca",
+  "description": "Budowanie poduszki bezpieczeństwa",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#131110",
+  "theme_color": "#131110",
+  "lang": "pl",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
