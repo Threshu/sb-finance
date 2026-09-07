@@ -35,6 +35,10 @@ export const KATEGORIE: Kategoria[] = [
   { id: 'przekaski', nazwa: 'Przekąski i napoje', typ: 'uznaniowy' },
   { id: 'dom', nazwa: 'Dom i rachunki', typ: 'staly' },
   { id: 'transport', nazwa: 'Transport i paliwo', typ: 'zmienny' },
+  // Noclegi w podróży do pracy. Osobno od transportu, bo paliwo ma własną
+  // linię w budżecie, a nocleg własną — zlane w jedno nie dają odpowiedzi
+  // na pytanie, ile naprawdę kosztuje dojeżdżanie.
+  { id: 'wyjazdy', nazwa: 'Wyjazdy i noclegi', typ: 'zmienny' },
   { id: 'zdrowie', nazwa: 'Zdrowie i leki', typ: 'zmienny' },
   { id: 'uroda', nazwa: 'Fryzjer i uroda', typ: 'uznaniowy' },
   // Traktowane jako inwestycja w siebie, nie luksus — konieczne jak leki,
@@ -134,6 +138,10 @@ const REGULY: { kategoria: string; slowa: string[] }[] = [
   {
     kategoria: 'zaklady',
     slowa: ['bukmach', 'zaklady wzajemne', 'zakłady wzajemne', 'kupon', 'lotto', 'totalizator'],
+  },
+  {
+    kategoria: 'wyjazdy',
+    slowa: ['hotel', 'motel', 'nocleg', 'hostel', 'pensjonat'],
   },
   // Przed subskrypcjami — "abonament" i "ifirma" inaczej wpadłyby tam.
   {

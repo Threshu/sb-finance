@@ -17,6 +17,8 @@
  *   npm run baza plan
  *   npm run baza dodaj '{"kwota":3.47,"opis":"Prowizja","kategoria":"oplaty"}'
  *   npm run baza wplata '{"kwota":100,"opis":"Nagroda z banku","zrodlo":"dodatkowy"}'
+ *   npm run baza popraw <id> '{"kategoria":"wyjazdy"}'
+ *   npm run baza usun <id>
  *   npm run baza plan-zapisz <plik.json>
  */
 
@@ -122,7 +124,7 @@ async function wydatki(klucz) {
     const kwota = w.kwota.toFixed(2).padStart(8);
     const kat = (w.kategoria ?? '—').padEnd(20);
     const sklep = (w.sklep ?? '').padEnd(16);
-    console.log(`${w.data}  ${kwota} zł  ${kat} ${sklep} ${w.opis}`);
+    console.log(`${w.data}  ${kwota} zł  ${kat} ${sklep} ${w.opis.padEnd(42)} ${d.id}`);
   }
 
   const suma = snap.docs.reduce((s, d) => s + d.data().kwota, 0);
@@ -268,6 +270,61 @@ async function wplata(surowy) {
   console.log('Apka zobaczy to od razu — nasłuchuje zmian.');
 }
 
+/**
+ * Poprawka istniejącego wydatku — najczęściej kategorii.
+ *
+ * Podmieniane są wyłącznie podane pola, reszta dokumentu zostaje. Dlatego to,
+ * a nie „usuń i dodaj od nowa": tamto gubi `dodano`, czyli kolejność wpisów
+ * w obrębie dnia, i podmienia id, które mogłeś już gdzieś zapisać.
+ */
+async function popraw(idWydatku, surowy) {
+  if (!idWydatku) throw new Error('Podaj id wydatku — pokazuje je `npm run baza wydatki`.');
+  if (!surowy) throw new Error('Podaj zmiany jako JSON, np. {"kategoria":"wyjazdy"}');
+
+  const zmiany = JSON.parse(surowy);
+  if (zmiany.kategoria) {
+    const kategorie = znaneKategorie();
+    if (!kategorie.includes(zmiany.kategoria)) {
+      throw new Error(`nieznana kategoria "${zmiany.kategoria}".
+Dostępne: ${kategorie.join(', ')}`);
+    }
+  }
+  if (zmiany.kwota !== undefined) {
+    const kwota = Number(zmiany.kwota);
+    if (!Number.isFinite(kwota) || kwota <= 0) {
+      throw new Error(`kwota "${zmiany.kwota}" musi być liczbą większą od zera.`);
+    }
+    zmiany.kwota = Math.round(kwota * 100) / 100;
+  }
+
+  const id = await uid();
+  const dok = pod(id, 'wydatki').doc(idWydatku);
+  const snap = await dok.get();
+  if (!snap.exists) throw new Error(`Nie ma wydatku o id ${idWydatku}.`);
+
+  await dok.set(zmiany, { merge: true });
+  const w = { ...snap.data(), ...zmiany };
+  console.log(`Poprawiono: ${w.data}  ${w.kwota.toFixed(2)} zł  ${w.kategoria ?? '—'}  ${w.opis}`);
+}
+
+/**
+ * Skasowanie wydatku. Bez kopii i bez cofania — jeden dokument, jedna decyzja.
+ * Dlatego najpierw wypisujemy, co znika: pomyłka w id skasowałaby cudzy wpis
+ * po cichu.
+ */
+async function usunWydatek(idWydatku) {
+  if (!idWydatku) throw new Error('Podaj id wydatku — pokazuje je `npm run baza wydatki`.');
+
+  const id = await uid();
+  const dok = pod(id, 'wydatki').doc(idWydatku);
+  const snap = await dok.get();
+  if (!snap.exists) throw new Error(`Nie ma wydatku o id ${idWydatku}.`);
+
+  const w = snap.data();
+  await dok.delete();
+  console.log(`Usunięto: ${w.data}  ${w.kwota.toFixed(2)} zł  ${w.kategoria ?? '—'}  ${w.opis}`);
+}
+
 /* ── Wywołanie ──────────────────────────────────────────── */
 
 const [komenda, ...reszta] = process.argv.slice(2);
@@ -278,6 +335,8 @@ const komendy = {
   'plan-zapisz': () => planZapisz(reszta[0]),
   dodaj: () => dodaj(reszta[0]),
   wplata: () => wplata(reszta[0]),
+  popraw: () => popraw(reszta[0], reszta[1]),
+  usun: () => usunWydatek(reszta[0]),
 };
 
 if (!komendy[komenda]) {
