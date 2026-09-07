@@ -10,7 +10,7 @@
  * pokazujemy najwyżej, ile było ostatnio, jako tekst obok pola.
  */
 
-import type { Wydatek } from './zakupy';
+import { odNajnowszych, type Wydatek } from './zakupy';
 
 /** Do porównywania wpisanego tekstu z historią: „zabka" ma trafiać w „Żabka". */
 export function bezOgonkow(tekst: string): string {
@@ -24,7 +24,7 @@ export function bezOgonkow(tekst: string): string {
 
 /** Najnowszy wpis wygrywa przy remisie liczności — nawyki się zmieniają. */
 function nowszy(a: Wydatek, b: Wydatek): Wydatek {
-  return a.data >= b.data ? a : b;
+  return odNajnowszych(a, b) <= 0 ? a : b;
 }
 
 /* ── Kafelki: najczęstsze kombinacje opis + kategoria + sklep ── */
@@ -116,7 +116,7 @@ export function sklepyKategorii(wydatki: Wydatek[], kategoria: string, ile = 3):
   }
 
   return [...liczniki.entries()]
-    .sort((a, b) => b[1].ile - a[1].ile || b[1].ostatni.data.localeCompare(a[1].ostatni.data))
+    .sort((a, b) => b[1].ile - a[1].ile || odNajnowszych(a[1].ostatni, b[1].ostatni))
     .slice(0, ile)
     .map(([nazwa]) => nazwa);
 }

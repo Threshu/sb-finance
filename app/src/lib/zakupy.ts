@@ -28,7 +28,27 @@ export type Wydatek = {
   /** Gdzie — Żabka, Orlen, Allegro. Osobno od opisu, żeby dało się zliczyć. */
   sklep?: string;
   zrodlo?: ZrodloWydatku;
+  /** Chwila zapisu (ISO). Ustala kolejność wpisów z tego samego dnia. */
+  dodano?: string;
 };
+
+/* ── Kolejność na listach ───────────────────────────────────
+   Wpisy z jednego dnia mają stać w kolejności dopisywania. Samo `data` tego
+   nie rozstrzyga (to tylko dzień), a Firestore oddaje dokumenty w kolejności
+   losowych identyfikatorów — stąd brało się wrażenie porządku alfabetycznego.
+   Dlatego drugim kluczem jest `dodano`. */
+
+export type Chronologiczny = { data: string; dodano?: string };
+
+/**
+ * Od najnowszego: najpierw dzień, potem chwila zapisu w obrębie dnia.
+ *
+ * Wpisy sprzed wprowadzenia pola `dodano` lądują na końcu swojego dnia —
+ * i słusznie, bo powstały wcześniej niż cokolwiek dopisanego później.
+ */
+export function odNajnowszych(a: Chronologiczny, b: Chronologiczny): number {
+  return b.data.localeCompare(a.data) || (b.dodano ?? '').localeCompare(a.dodano ?? '');
+}
 
 export function kluczMiesiacaWydatku(w: Wydatek): string {
   return w.data.slice(0, 7);

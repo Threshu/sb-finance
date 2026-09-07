@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Plan } from './plan';
-import { budzetowe, type Wydatek } from './zakupy';
+import { budzetowe, odNajnowszych, type Wydatek } from './zakupy';
 import {
   firebaseWlaczony,
   obserwujUzytkownika,
@@ -21,6 +21,8 @@ export type Wplata = {
   kwota: number;
   zrodlo: ZrodloWplaty;
   opis: string;
+  /** Chwila zapisu (ISO) — jak przy wydatkach, do kolejności w obrębie dnia. */
+  dodano?: string;
 };
 
 // Model wydatku mieszka w `zakupy.ts` razem z liczeniem podsumowań.
@@ -121,10 +123,10 @@ export function useStan() {
     async function podepnij(biezacyUid: string) {
       const [a, b, c] = await Promise.all([
         subskrybuj<Wydatek>(biezacyUid, 'wydatki', (poz) => {
-          if (aktywne) ustawWydatki([...poz].sort((x, y) => y.data.localeCompare(x.data)));
+          if (aktywne) ustawWydatki([...poz].sort(odNajnowszych));
         }),
         subskrybuj<Wplata>(biezacyUid, 'wplaty', (poz) => {
-          if (aktywne) ustawWplaty([...poz].sort((x, y) => y.data.localeCompare(x.data)));
+          if (aktywne) ustawWplaty([...poz].sort(odNajnowszych));
         }),
         subskrybuj<KrokiMiesiaca>(biezacyUid, 'kroki', (poz) => {
           if (!aktywne) return;
@@ -187,6 +189,7 @@ export function useStan() {
         kwota,
         zrodlo,
         opis,
+        dodano: new Date().toISOString(),
       };
       void zapiszPozycje(uid, 'wplaty', w.id, w);
     },
@@ -218,6 +221,9 @@ export function useStan() {
         opis,
         kategoria,
         zrodlo: 'reczny',
+        // Nie to samo co `data`: wieczorem można dopisać wczorajszy wydatek.
+        // `data` mówi, kiedy było, `dodano` — kiedy trafiło do bazy.
+        dodano: new Date().toISOString(),
       };
       const nazwaSklepu = sklep?.trim();
       if (nazwaSklepu) w.sklep = nazwaSklepu;

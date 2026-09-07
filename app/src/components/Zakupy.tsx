@@ -15,6 +15,7 @@ import {
 import {
   budzetowe,
   miesiaceZWydatkami,
+  odNajnowszych,
   podsumujMiesiac,
   porownajZPoprzednim,
   poprzedniMiesiac,
@@ -123,10 +124,7 @@ export function Zakupy({
   const podsumowanie = useMemo(() => podsumujMiesiac(wydatki, miesiac), [wydatki, miesiac]);
   const zmiany = useMemo(() => porownajZPoprzednim(wydatki, miesiac), [wydatki, miesiac]);
   const pozycje = useMemo(
-    () =>
-      wydatkiZMiesiaca(wydatki, miesiac).sort(
-        (a, b) => b.data.localeCompare(a.data) || b.kwota - a.kwota,
-      ),
+    () => wydatkiZMiesiaca(wydatki, miesiac).sort(odNajnowszych),
     [wydatki, miesiac],
   );
 

@@ -203,7 +203,13 @@ function sprawdzWydatek(wpis, kategorie, gdzie = 'wpis') {
 async function dodaj(surowy) {
   if (!surowy) throw new Error('Podaj wydatek jako JSON.');
   const wpis = JSON.parse(surowy);
-  const w = { ...sprawdzWydatek(wpis, znaneKategorie()), zrodlo: 'reczny' };
+  /* `dodano` to chwila zapisu, nie dzień wydatku — apka układa po nim wpisy
+     z tego samego dnia w kolejności dopisywania. */
+  const w = {
+    ...sprawdzWydatek(wpis, znaneKategorie()),
+    zrodlo: 'reczny',
+    dodano: new Date().toISOString(),
+  };
 
   const id = await uid();
   /* Jeden dokument, więc nie ma jak nadpisać niczego innego — to jest sens
