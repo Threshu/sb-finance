@@ -20,7 +20,9 @@ export function Wplaty({
   const [kwota, ustawKwote] = useState('');
   const [opis, ustawOpis] = useState('');
   const [potwierdzenie, ustawPotwierdzenie] = useState<string | null>(null);
+  const [blad, ustawBlad] = useState<string | null>(null);
   const zegar = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const poleKwoty = useRef<HTMLInputElement>(null);
 
   // Zdjęcie potwierdzenia po sześciu sekundach nie może przeżyć komponentu.
   useEffect(() => () => {
@@ -30,8 +32,25 @@ export function Wplaty({
   const liczba = Number(kwota.replace(',', '.'));
   const poprawna = Number.isFinite(liczba) && liczba > 0;
 
+  /*
+   * Przyciski są zawsze klikalne.
+   *
+   * Wcześniej miały `disabled`, dopóki w polu nie było poprawnej kwoty — a stan
+   * wyłączony jest tu z założenia dyskretny (przycisk zostaje złoty, tylko
+   * ciemniejszy). Na telefonie nie ma najechania kursorem, więc różnicy nie
+   * widać wcale: przycisk wygląda normalnie, klika się i nic się nie dzieje.
+   * To wygląda na zepsutą apkę, a nie na brakującą kwotę. Teraz kliknięcie
+   * bez kwoty mówi wprost, czego brakuje, i wraca kursorem do pola.
+   */
   function zapisz(zrodlo: 'plan' | 'dodatkowy') {
-    if (!poprawna) return;
+    if (!poprawna) {
+      ustawBlad(
+        kwota.trim() ? `„${kwota.trim()}" to nie jest kwota.` : 'Najpierw wpisz kwotę.',
+      );
+      poleKwoty.current?.focus();
+      return;
+    }
+    ustawBlad(null);
     dodaj(liczba, opis.trim() || (zrodlo === 'plan' ? 'Wpłata planowa' : 'Dodatkowy wpływ'), zrodlo);
     if (zegar.current) clearTimeout(zegar.current);
     if (zrodlo === 'dodatkowy') {
@@ -48,11 +67,15 @@ export function Wplaty({
     <Karta id="wplaty" tytul="Wpłaty na poduszkę" opoznienie={160}>
       <div className="formularz">
         <input
+          ref={poleKwoty}
           type="text"
           inputMode="decimal"
           placeholder="kwota"
           value={kwota}
-          onChange={(e) => ustawKwote(e.target.value)}
+          onChange={(e) => {
+            ustawKwote(e.target.value);
+            if (blad) ustawBlad(null);
+          }}
           aria-label="Kwota wpłaty"
         />
         <input
@@ -66,13 +89,19 @@ export function Wplaty({
       </div>
 
       <div className="formularz">
-        <button className="przycisk" disabled={!poprawna} onClick={() => zapisz('plan')}>
+        <button className="przycisk" onClick={() => zapisz('plan')}>
           Wpłata planowa
         </button>
-        <button className="przycisk cichy" disabled={!poprawna} onClick={() => zapisz('dodatkowy')}>
+        <button className="przycisk cichy" onClick={() => zapisz('dodatkowy')}>
           Dodatkowy wpływ
         </button>
       </div>
+
+      {blad && (
+        <p className="notka" style={{ color: 'var(--rust)' }} role="alert">
+          {blad}
+        </p>
+      )}
 
       {potwierdzenie && (
         <p className="notka" style={{ color: 'var(--sage)' }}>

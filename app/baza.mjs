@@ -16,6 +16,7 @@
  *   npm run baza wydatki 2026-09
  *   npm run baza plan
  *   npm run baza dodaj '{"kwota":3.47,"opis":"Prowizja","kategoria":"oplaty"}'
+ *   npm run baza wplata '{"kwota":100,"opis":"Nagroda z banku","zrodlo":"dodatkowy"}'
  *   npm run baza plan-zapisz <plik.json>
  */
 
@@ -220,6 +221,53 @@ async function dodaj(surowy) {
   console.log('Apka zobaczy to od razu — nasłuchuje zmian.');
 }
 
+/**
+ * Wpłata na poduszkę.
+ *
+ * Poduszką jest to, co faktycznie leży na koncie oszczędnościowym, więc wpłata
+ * dopisana tutaj ma odpowiadać przelewowi, który naprawdę tam poszedł — inaczej
+ * apka pokaże inne saldo niż bank.
+ *
+ * `zrodlo` rozdziela dwie rzeczy, które inaczej zlałyby się w jedną liczbę:
+ * „plan" to comiesięczna składka z rozdysponowania, „dodatkowy" to wszystko,
+ * czego w planie nie było — nagroda bankowa, turniej, zwrot. Domyślnie
+ * „dodatkowy", bo składkę planową odhacza się w apce przy rozdysponowaniu.
+ */
+async function wplata(surowy) {
+  if (!surowy) throw new Error('Podaj wpłatę jako JSON.');
+  const wpis = JSON.parse(surowy);
+
+  const kwota = Number(wpis.kwota);
+  if (!Number.isFinite(kwota) || kwota <= 0) {
+    throw new Error(`kwota "${wpis.kwota}" musi być liczbą większą od zera.`);
+  }
+  if (!wpis.opis || !wpis.opis.trim()) throw new Error('opis jest wymagany.');
+
+  const zrodlo = wpis.zrodlo ?? 'dodatkowy';
+  if (zrodlo !== 'plan' && zrodlo !== 'dodatkowy') {
+    throw new Error(`zrodlo "${zrodlo}" — dozwolone: plan, dodatkowy.`);
+  }
+
+  const data = wpis.data ?? new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+    throw new Error(`data "${data}" — oczekiwano RRRR-MM-DD.`);
+  }
+
+  const w = {
+    data,
+    kwota: Math.round(kwota * 100) / 100,
+    opis: wpis.opis.trim(),
+    zrodlo,
+    dodano: new Date().toISOString(),
+  };
+
+  const id = await uid();
+  await pod(id, 'wplaty').doc(noweId()).set(w);
+
+  console.log(`Dopisano wpłatę: ${w.data}  ${w.kwota.toFixed(2)} zł  ${w.opis} (${w.zrodlo})`);
+  console.log('Apka zobaczy to od razu — nasłuchuje zmian.');
+}
+
 /* ── Wywołanie ──────────────────────────────────────────── */
 
 const [komenda, ...reszta] = process.argv.slice(2);
@@ -229,6 +277,7 @@ const komendy = {
   plan,
   'plan-zapisz': () => planZapisz(reszta[0]),
   dodaj: () => dodaj(reszta[0]),
+  wplata: () => wplata(reszta[0]),
 };
 
 if (!komendy[komenda]) {
