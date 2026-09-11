@@ -143,10 +143,12 @@ const REGULY: { kategoria: string; slowa: string[] }[] = [
     kategoria: 'wyjazdy',
     slowa: ['hotel', 'motel', 'nocleg', 'hostel', 'pensjonat'],
   },
-  // Przed subskrypcjami — "abonament" i "ifirma" inaczej wpadłyby tam.
+  // Przed subskrypcjami — "abonament" inaczej wpadłby tam.
+  // Bez nazwy konkretnego biura rachunkowego: repozytorium jest publiczne,
+  // a sama obecność marki na liście mówi, z czyich usług ktoś korzysta.
   {
     kategoria: 'firma',
-    slowa: ['ifirma', 'ksiegowosc', 'księgowość', 'koszt firmowy', 'zus ', 'jpk'],
+    slowa: ['ksiegowosc', 'księgowość', 'biuro rachunkowe', 'koszt firmowy', 'zus ', 'jpk'],
   },
   {
     kategoria: 'subskrypcje',
