@@ -19,6 +19,12 @@ export type DataKluczowa = {
   tytul: string;
   opis: string;
   waga: Waga;
+  /**
+   * Nazwa banku, gdy termin dotyczy promocji albo oprocentowania konta.
+   * Takie daty idą do zakładki Banki, reszta zostaje w panelu — inaczej koniec
+   * promocji leżałby obok końca dopłat do kredytu i jedno przykrywało drugie.
+   */
+  bank?: string;
 };
 
 /** Jeden przelew w ramach kroku — ile, dokąd i po co. */
@@ -45,6 +51,48 @@ export type KrokMiesiaca = {
   /** Okno obowiązywania, RRRR-MM. Promocje bankowe mają daty ważności. */
   od?: string;
   do?: string;
+};
+
+/**
+ * Jedna wypłata z promocji bankowej — bank ma termin, nie konkretny dzień.
+ *
+ * `id` musi być stałe, bo po nim zapisuje się odhaczenie „wpłynęło". Trzymamy
+ * je w tej samej podkolekcji co kroki miesiąca (`kroki/{RRRR-MM}`), pod kluczem
+ * miesiąca, w którym wypłata ma nastąpić — to ta sama operacja co odhaczenie
+ * kroku, więc nie zasługiwała na osobny magazyn.
+ */
+export type WyplataPromocji = {
+  id: string;
+  /** RRRR-MM-DD — najpóźniejszy termin z regulaminu. */
+  do: string;
+  kwota: number;
+  /** Za co ta transza, np. „za październik". */
+  za: string;
+};
+
+/**
+ * Promocja bankowa — jedna na bank, z warunkami i harmonogramem wypłat.
+ *
+ * Osobny byt od `krokiMiesiaca`, mimo że oba opisują to samo pilnowanie
+ * warunków. Kroki odpowiadają na pytanie „co mam zrobić w tym miesiącu",
+ * promocja — „ile z tego jeszcze wpadnie i kiedy". Przy jednym banku różnica
+ * była nieistotna, przy pięciu kroki przestają się mieścić na ekranie, a suma
+ * pieniędzy do odebrania ginie między nimi.
+ */
+export type Promocja = {
+  id: string;
+  bank: string;
+  nazwa: string;
+  /** Nazwa konta z regulaminu — przy sporze z bankiem to ona się liczy. */
+  konto?: string;
+  /** Okno miesięcy, w których trzeba spełniać warunki. RRRR-MM. */
+  od?: string;
+  do?: string;
+  /** Co trzeba zrobić w każdym miesiącu okna. Krótkie hasła, nie zdania. */
+  warunki: string[];
+  /** Rzecz, o której łatwo zapomnieć — np. do kiedy nie wolno zamknąć konta. */
+  uwaga?: string;
+  wyplaty: WyplataPromocji[];
 };
 
 export type Obciazenie = {
@@ -140,6 +188,8 @@ export type Plan = {
   przegladyKwartalne: string[];
   rozdysponowanie: Rozdysponowanie;
   krokiMiesiaca: KrokMiesiaca[];
+  /** Promocje bankowe. Pole opcjonalne — plan bez nich jest poprawny. */
+  promocje?: Promocja[];
 };
 
 /* ── Walidacja ──────────────────────────────────────────────
@@ -205,13 +255,47 @@ export function sprawdzPlan(dane: unknown): WynikSprawdzenia {
     bledy.push('Sekcja „rozdysponowanie" jest niekompletna.');
   }
 
-  // Zdublowane identyfikatory rozsypałyby odhaczanie kroków.
+  // Promocje są opcjonalne, ale jeśli są — muszą mieć wypłaty z terminem
+  // i kwotą, bo na nich stoi cała arytmetyka „ile zostało do odebrania".
+  const promocje = p.promocje;
+  if (promocje !== undefined) {
+    if (!Array.isArray(promocje)) {
+      bledy.push('Pole „promocje" musi być listą.');
+    } else {
+      for (const [i, sur] of promocje.entries()) {
+        const pr = sur as Promocja | undefined;
+        const gdzie = pr?.id ? `promocja „${pr.id}"` : `promocja nr ${i + 1}`;
+        if (!pr?.id || !pr.bank || !pr.nazwa) {
+          bledy.push(`${gdzie}: wymagane są „id", „bank" i „nazwa".`);
+        }
+        if (!Array.isArray(pr?.warunki)) bledy.push(`${gdzie}: „warunki" muszą być listą.`);
+        if (!Array.isArray(pr?.wyplaty)) {
+          bledy.push(`${gdzie}: „wyplaty" muszą być listą.`);
+          continue;
+        }
+        for (const w of pr.wyplaty) {
+          if (!w?.id || typeof w.kwota !== 'number') {
+            bledy.push(`${gdzie}: wypłata bez „id" albo bez liczbowej „kwota".`);
+          }
+          if (typeof w?.do !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(w.do)) {
+            bledy.push(`${gdzie}: wypłata „${w?.id}" — „do" musi być datą RRRR-MM-DD.`);
+          }
+        }
+      }
+    }
+  }
+
+  // Zdublowane identyfikatory rozsypałyby odhaczanie — kroki i wypłaty siedzą
+  // w tej samej podkolekcji `kroki/{RRRR-MM}`, więc liczą się do jednej puli.
   const idKrokow = [
     ...(Array.isArray(p.krokiMiesiaca) ? (p.krokiMiesiaca as KrokMiesiaca[]) : []),
     ...(rozdysponowanie?.kroki ?? []),
+    ...(Array.isArray(promocje) ? (promocje as Promocja[]) : []).flatMap((pr) => pr?.wyplaty ?? []),
   ].map((k) => k?.id);
-  if (new Set(idKrokow).size !== idKrokow.length) {
-    bledy.push('Kroki mają powtórzone identyfikatory („id").');
+  // Które id — bez tego zostaje ręczne przeszukiwanie planu po omacku.
+  const powtorzone = [...new Set(idKrokow.filter((id, i) => idKrokow.indexOf(id) !== i))];
+  if (powtorzone.length) {
+    bledy.push(`Powtórzone identyfikatory („id"): ${powtorzone.join(', ')}.`);
   }
 
   if (typeof p.cel === 'number' && typeof p.celMinimum === 'number' && p.celMinimum > p.cel) {
@@ -311,6 +395,83 @@ export function krokiWgFaz(
 /** Obciążenia obowiązujące w danym miesiącu. */
 export function obciazeniaMiesiaca(plan: Plan, klucz: string): Obciazenie[] {
   return plan.przeplyw.obciazenia.filter((o) => wOknie(o, klucz));
+}
+
+/* ── Promocje bankowe ───────────────────────────────────────── */
+
+/** Wypłata z doklejonym bankiem — lista wypłat sama w sobie nie mówi, czyja jest. */
+export type WyplataZBanku = WyplataPromocji & { bank: string; promocjaId: string };
+
+/**
+ * Odhaczenia wypłat leżą w `kroki/{RRRR-MM}` pod kluczem miesiąca terminu.
+ * Funkcja jest tu, a nie w komponencie, bo ten sam klucz liczy zapis i odczyt —
+ * rozjazd między nimi dawałby ptaszki, które znikają po odświeżeniu.
+ */
+export function miesiacWyplaty(w: WyplataPromocji): string {
+  return w.do.slice(0, 7);
+}
+
+export function czyOdebrana(
+  w: WyplataPromocji,
+  kroki: Record<string, Record<string, boolean>>,
+): boolean {
+  return Boolean(kroki[miesiacWyplaty(w)]?.[w.id]);
+}
+
+/** Wszystkie wypłaty ze wszystkich promocji, od najbliższego terminu. */
+export function wyplatyPromocji(plan: Plan): WyplataZBanku[] {
+  return (plan.promocje ?? [])
+    .flatMap((p) => p.wyplaty.map((w) => ({ ...w, bank: p.bank, promocjaId: p.id })))
+    .sort((a, b) => a.do.localeCompare(b.do));
+}
+
+export type StanPromocji = {
+  /** Suma wszystkich transz w planie. */
+  lacznie: number;
+  odebrane: number;
+  /** Ile jeszcze wpadnie, jeśli warunki będą spełniane. */
+  zostalo: number;
+  /** Najbliższa nieodebrana wypłata — null, gdy nie ma już żadnej. */
+  najblizsza: WyplataZBanku | null;
+};
+
+export function stanPromocji(
+  plan: Plan,
+  kroki: Record<string, Record<string, boolean>>,
+): StanPromocji {
+  const wszystkie = wyplatyPromocji(plan);
+  let lacznie = 0;
+  let odebrane = 0;
+  for (const w of wszystkie) {
+    lacznie += w.kwota;
+    if (czyOdebrana(w, kroki)) odebrane += w.kwota;
+  }
+  return {
+    lacznie,
+    odebrane,
+    zostalo: lacznie - odebrane,
+    najblizsza: wszystkie.find((w) => !czyOdebrana(w, kroki)) ?? null,
+  };
+}
+
+/**
+ * Czy w danym miesiącu trzeba spełniać warunki tej promocji.
+ * Promocja bez okna liczy się jako zawsze aktywna — tak samo jak kroki.
+ */
+export function promocjaAktywna(p: Promocja, klucz: string): boolean {
+  return wOknie(p, klucz);
+}
+
+/** Ile transz z tej promocji zostało do odebrania. */
+export function zostaloZPromocji(
+  p: Promocja,
+  kroki: Record<string, Record<string, boolean>>,
+): { kwota: number; sztuk: number } {
+  const niezebrane = p.wyplaty.filter((w) => !czyOdebrana(w, kroki));
+  return {
+    kwota: niezebrane.reduce((s, w) => s + w.kwota, 0),
+    sztuk: niezebrane.length,
+  };
 }
 
 /** Ile zostaje na koncie firmowym po odłożeniu podatków. */

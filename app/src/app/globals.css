@@ -120,13 +120,18 @@ body::after {
   margin-bottom: 0;
 }
 
+/* Kolumna na cały wiersz, w każdej szerokości. Dla treści, która w wąskiej
+   kolumnie rozciąga siatkę i zostawia obok pustkę — jak lista dwudziestu
+   paru wypłat. */
+.kolumna.pelna { grid-column: 1 / -1; }
+
 /* Tablet i wąski desktop: dwie kolumny, szeroka zajmuje pełny wiersz. */
 @media (min-width: 900px) {
   .panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kolumna.szeroka { grid-column: 1 / -1; }
 }
 
-/* Pełny desktop: trzy kolumny, lewa szersza (mieści miernik i przepływ). */
+/* Pełny desktop: trzy kolumny, lewa szersza (mieści budżet i przepływ). */
 @media (min-width: 1360px) {
   .panel { grid-template-columns: 1.35fr 1fr 1fr; }
   .kolumna.szeroka { grid-column: auto; }
@@ -1309,3 +1314,63 @@ input[type='date'] { color-scheme: dark; }
 .chip-licznik::before { content: '· '; }
 
 .chip.wybrany .chip-licznik { color: var(--brass-deep); }
+
+/* ── Banki: promocje i harmonogram wypłat ───────────────── */
+
+.warunki {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.warunki li {
+  position: relative;
+  padding-left: 14px;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.warunki li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 8px;
+  width: 4px;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--brass);
+}
+
+/* Promocja poza oknem warunków nie znika — w przyszłym miesiącu wróci,
+   a ukryta wyglądałaby jak błąd planu. Blednie zamiast znikać. */
+.warunki li[data-nieaktywna='true'] {
+  color: var(--faint);
+}
+
+.warunki li[data-nieaktywna='true']::before {
+  background: var(--raised);
+}
+
+.karta > .karta-tresc .uwaga {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--brass-deep);
+  line-height: 1.45;
+  margin-top: 10px;
+}
+
+/* Wypłaty układają się w kolumny dopiero wtedy, gdy jest na nie miejsce.
+   Jedna kolumna dwudziestu paru pozycji to ekran samego przewijania. */
+.lista-wyplat {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  column-gap: 22px;
+}
+
+/* Kreska pod ostatnią pozycją w kolumnie wisiałaby w powietrzu — przy siatce
+   „ostatni w DOM" i „ostatni w kolumnie" to dwie różne rzeczy. */
+.lista-wyplat .krok:last-of-type { border-bottom: 1px solid var(--line-soft); }

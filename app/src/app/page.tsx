@@ -11,7 +11,6 @@ import { EkranLogowania, EkranBrakPlanu } from '@/components/Brama';
 import { Miernik } from '@/components/Miernik';
 import { Przeplyw } from '@/components/Przeplyw';
 import { Rozdysponowanie } from '@/components/Rozdysponowanie';
-import { KrokiMiesiaca } from '@/components/KrokiMiesiaca';
 import { Kamienie } from '@/components/Kamienie';
 import { Wplaty } from '@/components/Wplaty';
 import { Budzet } from '@/components/Budzet';
@@ -19,8 +18,9 @@ import { Fundusz } from '@/components/Fundusz';
 import { Daty } from '@/components/Daty';
 import { Konto } from '@/components/Konto';
 import { Zakupy } from '@/components/Zakupy';
+import { Banki } from '@/components/Banki';
 
-type Widok = 'panel' | 'zakupy';
+type Widok = 'panel' | 'zakupy' | 'banki';
 
 function Naglowek({
   widok,
@@ -51,6 +51,14 @@ function Naglowek({
             onClick={() => ustawWidok('zakupy')}
           >
             Zakupy
+          </button>
+          <button
+            className="zakladka"
+            role="tab"
+            aria-selected={widok === 'banki'}
+            onClick={() => ustawWidok('banki')}
+          >
+            Banki
           </button>
         </div>
       ) : (
@@ -125,15 +133,27 @@ export default function Strona() {
 
           {widok === 'zakupy' && <Zakupy wydatki={stan.wydatki} usun={usunWydatek} />}
 
+          {widok === 'banki' && <Banki kroki={stan.kroki} przelacz={przelaczKrok} />}
+
           {/* Trzy niezależne kolumny — każda płynie własną wysokością,
               dzięki czemu nigdzie nie zostaje pusta przestrzeń.
               Lewa: stan i pieniądze. Środkowa: co masz zrobić. Prawa: kontrola. */}
           {widok === 'panel' && (
             <div className="panel">
+              {/* Kolejność i rozkład kart nie są przypadkowe. Budżet idzie
+                  pierwszy, bo to jedyna karta używana codziennie — reszta
+                  odpowiada na pytania zadawane raz w miesiącu. Karty są
+                  rozłożone na kolumny o zbliżonej wysokości: siatka nie jest
+                  masonry, więc krótsza kolumna zostawia pod sobą pustkę. */}
               <div className="kolumna szeroka">
+                <Budzet
+                  wydatki={stan.wydatki}
+                  wydane={wydatkiMiesiaca(stan, klucz)}
+                  dodaj={dodajWydatek}
+                  usun={usunWydatek}
+                />
                 <Miernik saldo={saldo(plan, stan)} />
                 <Przeplyw />
-                <Wplaty wplaty={stan.wplaty} dodaj={dodajWplate} usun={usunWplate} />
               </div>
 
               <div className="kolumna">
@@ -145,20 +165,11 @@ export default function Strona() {
                     (plan.funduszPoziomRoboczy ?? Infinity)
                   }
                 />
-                <KrokiMiesiaca
-                  kroki={stan.kroki[klucz] ?? {}}
-                  przelacz={(krokId) => przelaczKrok(klucz, krokId)}
-                />
+                <Wplaty wplaty={stan.wplaty} dodaj={dodajWplate} usun={usunWplate} />
               </div>
 
               <div className="kolumna">
                 <Kamienie saldo={saldo(plan, stan)} />
-                <Budzet
-                  wydatki={stan.wydatki}
-                  wydane={wydatkiMiesiaca(stan, klucz)}
-                  dodaj={dodajWydatek}
-                  usun={usunWydatek}
-                />
                 <Fundusz wydatki={stan.wydatki} usun={usunWydatek} />
                 <Daty />
               </div>

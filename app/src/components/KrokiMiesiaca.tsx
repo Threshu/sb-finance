@@ -84,7 +84,7 @@ export function KrokiMiesiaca({
   return (
     <Karta
       id="kroki-miesiaca"
-      tytul={`Promocje bankowe — ${nazwaMiesiaca(klucz)}`}
+      tytul={`Do zrobienia — ${nazwaMiesiaca(klucz)}`}
       opoznienie={120}
       dodatek={
         <span className={`mono licznik${komplet ? ' komplet' : ''}`}>
