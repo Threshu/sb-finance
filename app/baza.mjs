@@ -12,14 +12,46 @@
  * Poświadczenia to klucz konta serwisowego. Klucz OMIJA firestore.rules —
  * trzymaj go poza repozytorium i nie wysyłaj nigdzie.
  *
- *   npm run baza stan
- *   npm run baza wydatki 2026-09
- *   npm run baza plan
- *   npm run baza dodaj '{"kwota":3.47,"opis":"Prowizja","kategoria":"oplaty"}'
- *   npm run baza wplata '{"kwota":100,"opis":"Nagroda z banku","zrodlo":"dodatkowy"}'
- *   npm run baza popraw <id> '{"kategoria":"wyjazdy"}'
- *   npm run baza usun <id>
- *   npm run baza plan-zapisz <plik.json>
+ * Dwie warstwy komend.
+ *
+ * 1. Komendy dziedzinowe — znają kształt danych i sprawdzają go przed zapisem
+ *    (kategoria z `kategorie.ts`, kwota dodatnia, data RRRR-MM-DD). Na co dzień
+ *    używa się wyłącznie ich.
+ *
+ *      npm run baza stan
+ *      npm run baza wydatki [RRRR-MM]
+ *      npm run baza wplaty [RRRR-MM]
+ *      npm run baza kroki [RRRR-MM]
+ *      npm run baza profil
+ *      npm run baza plan
+ *      npm run baza dodaj '{"kwota":3.47,"opis":"Prowizja","kategoria":"oplaty"}'
+ *      npm run baza popraw <id> '{"kategoria":"wyjazdy"}'
+ *      npm run baza usun <id>
+ *      npm run baza wplata '{"kwota":100,"opis":"Nagroda z banku","zrodlo":"dodatkowy"}'
+ *      npm run baza wplata-popraw <id> '{"kwota":120}'
+ *      npm run baza wplata-usun <id>
+ *      npm run baza krok 2026-09 '{"r-przelewy":true}'
+ *      npm run baza kroki-usun 2026-09
+ *      npm run baza profil-ustaw '{"zwinieteKarty":{"fundusz":true}}'
+ *      npm run baza plan-zapisz <plik.json>
+ *      npm run baza plan-popraw '{"budzetBiezacy":7800}'
+ *
+ * 2. Komendy surowe — dowolny dokument, dowolne pole, **bez żadnej walidacji**.
+ *    Są po to, żeby nie trzeba było dopisywać komendy za każdym razem, gdy
+ *    w bazie pojawi się nowe miejsce. Cena: zły JSON wchodzi bez ostrzeżenia,
+ *    a apka pokaże to dopiero jako błąd wczytania.
+ *
+ *      npm run baza pokaz  <sciezka>
+ *      npm run baza zapisz <sciezka> '<json>'    nadpisuje cały dokument
+ *      npm run baza scal   <sciezka> '<json>'    podmienia tylko podane pola
+ *      npm run baza skasuj <sciezka>
+ *
+ *    W ścieżce `@` oznacza uid, więc nie trzeba go przepisywać:
+ *      @                    → uzytkownicy/{uid}          (profil)
+ *      @wydatki             → cała podkolekcja
+ *      @wydatki/<id>        → jeden wydatek
+ *      @kroki/2026-09       → odhaczone kroki miesiąca
+ *      plany/@              → plan
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -131,6 +163,56 @@ async function wydatki(klucz) {
   console.log(`\n${snap.size} pozycji, razem ${suma.toFixed(2)} zł`);
 }
 
+async function wplaty(klucz) {
+  const id = await uid();
+  const zapytanie = klucz
+    ? pod(id, 'wplaty').where('data', '>=', `${klucz}-01`).where('data', '<=', `${klucz}-31`)
+    : pod(id, 'wplaty');
+
+  const snap = await zapytanie.orderBy('data').get();
+  for (const d of snap.docs) {
+    const w = d.data();
+    const kwota = w.kwota.toFixed(2).padStart(9);
+    console.log(`${w.data}  ${kwota} zł  ${(w.zrodlo ?? '—').padEnd(10)} ${w.opis.padEnd(42)} ${d.id}`);
+  }
+
+  /* Rozbicie na źródła, bo to dwie różne rzeczy: „plan" to składka
+     z rozdysponowania, „dodatkowy" to nadwyżka ponad plan. Zlane w jedną sumę
+     przestają cokolwiek mówić o tym, czy plan jest dotrzymywany. */
+  const suma = (z) =>
+    snap.docs.filter((d) => !z || d.data().zrodlo === z).reduce((s, d) => s + d.data().kwota, 0);
+  console.log(
+    `\n${snap.size} wpłat, razem ${suma().toFixed(2)} zł ` +
+      `(z planu ${suma('plan').toFixed(2)}, dodatkowe ${suma('dodatkowy').toFixed(2)})`,
+  );
+}
+
+/** Odhaczone kroki miesiąca: jeden dokument `kroki/{RRRR-MM}`, pola to id kroków. */
+async function kroki(klucz) {
+  const id = await uid();
+  const snap = klucz
+    ? await pod(id, 'kroki').doc(klucz).get().then((d) => (d.exists ? { docs: [d] } : { docs: [] }))
+    : await pod(id, 'kroki').orderBy('__name__').get();
+
+  if (!snap.docs.length) return console.log(klucz ? `Brak kroków dla ${klucz}.` : 'Brak kroków.');
+
+  for (const d of snap.docs) {
+    const dane = d.data();
+    const odhaczone = Object.entries(dane).filter(([, v]) => v === true).map(([k]) => k);
+    console.log(`${d.id}  (${odhaczone.length} odhaczonych)`);
+    for (const k of odhaczone) console.log(`    ✔ ${k}`);
+    const inne = Object.entries(dane).filter(([, v]) => v !== true);
+    for (const [k, v] of inne) console.log(`    · ${k}: ${JSON.stringify(v)}`);
+  }
+}
+
+async function profil() {
+  const id = await uid();
+  const dok = await db.doc(`uzytkownicy/${id}`).get();
+  if (!dok.exists) return console.log('Brak dokumentu profilu.');
+  console.log(JSON.stringify(dok.data(), null, 2));
+}
+
 async function plan() {
   const id = await uid();
   const dok = await db.doc(`plany/${id}`).get();
@@ -151,25 +233,55 @@ async function plan() {
  * bez tego jeden zły JSON kasuje plan bezpowrotnie. Kopię kasujesz po
  * sprawdzeniu, że nowy plan wstał w apce.
  */
+async function kopiaPlanu(id) {
+  const stary = await db.doc(`plany/${id}`).get();
+  if (!stary.exists) return null;
+  const znacznik = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  const kopia = `plan-kopia-${znacznik}.json`;
+  writeFileSync(kopia, JSON.stringify(stary.data()?.plan ?? null, null, 2), 'utf8');
+  console.log(`Kopia poprzedniego planu: ${kopia}`);
+  return stary.data()?.plan ?? null;
+}
+
+function podsumujPlan(p) {
+  console.log(`Zapisano plan: ${Object.keys(p).length} pól.`);
+  console.log(
+    `budżet ${p.budzetBiezacy}, cel ${p.cel}, kroków miesiąca ${p.krokiMiesiaca?.length ?? 0}`,
+  );
+}
+
 async function planZapisz(sciezka) {
   if (!sciezka) throw new Error('Podaj ścieżkę do pliku JSON z planem.');
   const nowy = JSON.parse(readFileSync(sciezka, 'utf8'));
   const id = await uid();
 
-  const stary = await db.doc(`plany/${id}`).get();
-  if (stary.exists) {
-    const znacznik = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    const kopia = `plan-kopia-${znacznik}.json`;
-    writeFileSync(kopia, JSON.stringify(stary.data()?.plan ?? null, null, 2), 'utf8');
-    console.log(`Kopia poprzedniego planu: ${kopia}`);
-  }
+  await kopiaPlanu(id);
+  await db.doc(`plany/${id}`).set({ plan: nowy, zaktualizowano: FieldValue.serverTimestamp() });
+  podsumujPlan(nowy);
+}
 
+/**
+ * Poprawka pojedynczych pól planu, bez przepisywania całości.
+ *
+ * Po to, żeby zmiana jednej kwoty nie wymagała zrzutu planu na dysk — a zrzut
+ * planu to cały plan finansowy leżący w pliku, którego potem trzeba pamiętać
+ * skasować. Scalanie liczymy tutaj i zapisujemy gotowy obiekt zamiast używać
+ * `merge: true`: Firestore scala mapy rekurencyjnie, więc usunięcie pola
+ * zagnieżdżonego byłoby niewykonalne, a tablice i tak podmienia w całości.
+ */
+async function planPopraw(surowy) {
+  if (!surowy) throw new Error('Podaj zmiany jako JSON, np. {"budzetBiezacy":7800}');
+  const zmiany = JSON.parse(surowy);
+  const id = await uid();
+
+  const stary = await kopiaPlanu(id);
+  if (!stary) throw new Error('Nie ma planu w bazie — użyj `plan-zapisz`.');
+
+  const nowy = { ...stary, ...zmiany };
   await db.doc(`plany/${id}`).set({ plan: nowy, zaktualizowano: FieldValue.serverTimestamp() });
 
-  console.log(`Zapisano plan: ${Object.keys(nowy).length} pól.`);
-  console.log(
-    `budżet ${nowy.budzetBiezacy}, cel ${nowy.cel}, kroków miesiąca ${nowy.krokiMiesiaca?.length ?? 0}`,
-  );
+  console.log(`Podmienione pola: ${Object.keys(zmiany).join(', ')}`);
+  podsumujPlan(nowy);
 }
 
 /* ── Zapis ──────────────────────────────────────────────── */
@@ -277,8 +389,8 @@ async function wplata(surowy) {
  * a nie „usuń i dodaj od nowa": tamto gubi `dodano`, czyli kolejność wpisów
  * w obrębie dnia, i podmienia id, które mogłeś już gdzieś zapisać.
  */
-async function popraw(idWydatku, surowy) {
-  if (!idWydatku) throw new Error('Podaj id wydatku — pokazuje je `npm run baza wydatki`.');
+async function popraw(kolekcja, idWpisu, surowy) {
+  if (!idWpisu) throw new Error(`Podaj id — pokazuje je \`npm run baza ${kolekcja}\`.`);
   if (!surowy) throw new Error('Podaj zmiany jako JSON, np. {"kategoria":"wyjazdy"}');
 
   const zmiany = JSON.parse(surowy);
@@ -289,6 +401,9 @@ async function popraw(idWydatku, surowy) {
 Dostępne: ${kategorie.join(', ')}`);
     }
   }
+  if (zmiany.zrodlo && kolekcja === 'wplaty' && !['plan', 'dodatkowy'].includes(zmiany.zrodlo)) {
+    throw new Error(`zrodlo "${zmiany.zrodlo}" — dozwolone: plan, dodatkowy.`);
+  }
   if (zmiany.kwota !== undefined) {
     const kwota = Number(zmiany.kwota);
     if (!Number.isFinite(kwota) || kwota <= 0) {
@@ -298,31 +413,181 @@ Dostępne: ${kategorie.join(', ')}`);
   }
 
   const id = await uid();
-  const dok = pod(id, 'wydatki').doc(idWydatku);
+  const dok = pod(id, kolekcja).doc(idWpisu);
   const snap = await dok.get();
-  if (!snap.exists) throw new Error(`Nie ma wydatku o id ${idWydatku}.`);
+  if (!snap.exists) throw new Error(`Nie ma wpisu o id ${idWpisu} w ${kolekcja}.`);
 
   await dok.set(zmiany, { merge: true });
   const w = { ...snap.data(), ...zmiany };
-  console.log(`Poprawiono: ${w.data}  ${w.kwota.toFixed(2)} zł  ${w.kategoria ?? '—'}  ${w.opis}`);
+  console.log(
+    `Poprawiono: ${w.data}  ${w.kwota.toFixed(2)} zł  ${w.kategoria ?? w.zrodlo ?? '—'}  ${w.opis}`,
+  );
 }
 
 /**
- * Skasowanie wydatku. Bez kopii i bez cofania — jeden dokument, jedna decyzja.
+ * Skasowanie wpisu. Bez kopii i bez cofania — jeden dokument, jedna decyzja.
  * Dlatego najpierw wypisujemy, co znika: pomyłka w id skasowałaby cudzy wpis
  * po cichu.
  */
-async function usunWydatek(idWydatku) {
-  if (!idWydatku) throw new Error('Podaj id wydatku — pokazuje je `npm run baza wydatki`.');
+async function usunWpis(kolekcja, idWpisu) {
+  if (!idWpisu) throw new Error(`Podaj id — pokazuje je \`npm run baza ${kolekcja}\`.`);
 
   const id = await uid();
-  const dok = pod(id, 'wydatki').doc(idWydatku);
+  const dok = pod(id, kolekcja).doc(idWpisu);
   const snap = await dok.get();
-  if (!snap.exists) throw new Error(`Nie ma wydatku o id ${idWydatku}.`);
+  if (!snap.exists) throw new Error(`Nie ma wpisu o id ${idWpisu} w ${kolekcja}.`);
 
   const w = snap.data();
   await dok.delete();
-  console.log(`Usunięto: ${w.data}  ${w.kwota.toFixed(2)} zł  ${w.kategoria ?? '—'}  ${w.opis}`);
+  console.log(
+    `Usunięto: ${w.data}  ${w.kwota.toFixed(2)} zł  ${w.kategoria ?? w.zrodlo ?? '—'}  ${w.opis}`,
+  );
+}
+
+/**
+ * Odhaczenie albo odznaczenie kroków miesiąca.
+ *
+ * Zapis scalający, nie nadpisujący, bo dokument miesiąca zbiera odhaczenia
+ * z apki i stąd naraz — nadpisanie skasowałoby to, co odhaczono na telefonie.
+ * Odznaczenie: `{"r-przelewy":false}`.
+ */
+async function krok(klucz, surowy) {
+  if (!/^\d{4}-\d{2}$/.test(klucz ?? '')) throw new Error('Podaj miesiąc jako RRRR-MM.');
+  if (!surowy) throw new Error('Podaj kroki jako JSON, np. {"r-przelewy":true}');
+
+  const zmiany = JSON.parse(surowy);
+  for (const [k, v] of Object.entries(zmiany)) {
+    if (typeof v !== 'boolean') throw new Error(`krok "${k}": oczekiwano true albo false.`);
+  }
+
+  const id = await uid();
+  await pod(id, 'kroki').doc(klucz).set(zmiany, { merge: true });
+
+  const opis = Object.entries(zmiany)
+    .map(([k, v]) => `${v ? '✔' : '✘'} ${k}`)
+    .join(', ');
+  console.log(`${klucz}: ${opis}`);
+}
+
+/** Kasuje odhaczenia całego miesiąca — dokument znika, apka pokaże czystą listę. */
+async function krokiUsun(klucz) {
+  if (!/^\d{4}-\d{2}$/.test(klucz ?? '')) throw new Error('Podaj miesiąc jako RRRR-MM.');
+
+  const id = await uid();
+  const dok = pod(id, 'kroki').doc(klucz);
+  const snap = await dok.get();
+  if (!snap.exists) throw new Error(`Nie ma kroków dla ${klucz}.`);
+
+  const ile = Object.values(snap.data()).filter((v) => v === true).length;
+  await dok.delete();
+  console.log(`Usunięto kroki ${klucz} (${ile} odhaczonych).`);
+}
+
+/** Profil to preferencje widoku, nie dane finansowe — stąd sam merge, bez kopii. */
+async function profilUstaw(surowy) {
+  if (!surowy) throw new Error('Podaj zmiany jako JSON, np. {"zwinieteKarty":{"fundusz":true}}');
+  const zmiany = JSON.parse(surowy);
+
+  const id = await uid();
+  await db.doc(`uzytkownicy/${id}`).set(zmiany, { merge: true });
+  console.log(`Profil: podmienione pola ${Object.keys(zmiany).join(', ')}`);
+}
+
+/* ── Surowy dostęp do dowolnego miejsca w bazie ─────────────
+   Bez walidacji dziedzinowej — to jest jednocześnie sens tych komend i ich
+   cena. Są po to, żeby nowe pole w bazie nie wymagało nowej komendy tutaj;
+   na co dzień lepsze są komendy wyżej, bo łapią literówkę w kategorii
+   albo ujemną kwotę, zanim wejdzie do bazy. */
+
+/**
+ * `@` w dowolnym segmencie to uid; `@` z przodu rozwija się do dokumentu
+ * użytkownika, czyli `@wydatki` znaczy `uzytkownicy/{uid}/wydatki`.
+ *
+ * Bez ukośnika po `@` celowo. Git Bash przerabia każdy argument zaczynający
+ * się od `/` na ścieżkę Windows, więc z `@/wydatki` robi mu się
+ * `@C:/Program Files/Git/wydatki` — ten sam mechanizm, który wyżej psuje
+ * ustawianie GOOGLE_APPLICATION_CREDENTIALS. `@wydatki` przechodzi nietknięte.
+ */
+async function rozwin(wzor) {
+  if (!wzor) throw new Error('Podaj ścieżkę, np. @wydatki albo plany/@');
+  if (wzor.includes('Program Files/Git')) {
+    throw new Error(
+      `Powłoka przerobiła ścieżkę na "${wzor}".\n` +
+        'Pomiń ukośnik po @: zamiast @/wydatki napisz @wydatki.',
+    );
+  }
+
+  const id = await uid();
+  const czesci = (wzor.startsWith('@') ? `uzytkownicy/${id}/${wzor.slice(1)}` : wzor)
+    .split('/')
+    .filter(Boolean);
+
+  return czesci.map((c) => (c === '@' ? id : c)).join('/');
+}
+
+/* Nieparzysta liczba segmentów to kolekcja, parzysta — dokument. */
+const toDokument = (s) => s.split('/').length % 2 === 0;
+
+async function pokaz(wzor) {
+  const s = await rozwin(wzor);
+
+  if (toDokument(s)) {
+    const dok = await db.doc(s).get();
+    if (!dok.exists) return console.log(`Nie ma dokumentu ${s}.`);
+    return console.log(JSON.stringify(dok.data(), null, 2));
+  }
+
+  const snap = await db.collection(s).get();
+  if (snap.empty) return console.log(`Kolekcja ${s} jest pusta.`);
+  const pozycje = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  console.log(JSON.stringify(pozycje, null, 2));
+  console.log(`\n${snap.size} dokumentów w ${s}`);
+}
+
+/** Plan jest jedynym źródłem prawdy i nie ma go nigdzie indziej — stąd kopia. */
+async function chronPlan(s) {
+  if (s.startsWith('plany/')) await kopiaPlanu(await uid());
+}
+
+async function zapisz(wzor, surowy) {
+  const s = await rozwin(wzor);
+  if (!toDokument(s)) throw new Error(`${s} to kolekcja — zapisz wskazuje na dokument.`);
+  if (!surowy) throw new Error('Podaj treść dokumentu jako JSON.');
+
+  await chronPlan(s);
+  await db.doc(s).set(JSON.parse(surowy));
+  console.log(`Nadpisano ${s}.`);
+}
+
+async function scal(wzor, surowy) {
+  const s = await rozwin(wzor);
+  if (!toDokument(s)) throw new Error(`${s} to kolekcja — scal wskazuje na dokument.`);
+  if (!surowy) throw new Error('Podaj zmiany jako JSON.');
+
+  const zmiany = JSON.parse(surowy);
+  await chronPlan(s);
+  await db.doc(s).set(zmiany, { merge: true });
+  console.log(`${s}: podmienione pola ${Object.keys(zmiany).join(', ')}`);
+}
+
+async function skasuj(wzor) {
+  const s = await rozwin(wzor);
+  if (!toDokument(s)) {
+    throw new Error(
+      `${s} to kolekcja. Firestore nie kasuje kolekcji jednym ruchem — ` +
+        'skasuj dokumenty pojedynczo, id pokaże `pokaz`.',
+    );
+  }
+
+  const dok = await db.doc(s).get();
+  if (!dok.exists) throw new Error(`Nie ma dokumentu ${s}.`);
+
+  /* Wypisujemy całą treść przed skasowaniem: bez cofania to jedyny ślad
+     po tym, co zniknęło. */
+  console.log(JSON.stringify(dok.data(), null, 2));
+  await chronPlan(s);
+  await db.doc(s).delete();
+  console.log(`\nSkasowano ${s}.`);
 }
 
 /* ── Wywołanie ──────────────────────────────────────────── */
@@ -331,16 +596,62 @@ const [komenda, ...reszta] = process.argv.slice(2);
 const komendy = {
   stan,
   wydatki: () => wydatki(reszta[0]),
+  wplaty: () => wplaty(reszta[0]),
+  kroki: () => kroki(reszta[0]),
+  profil,
   plan,
-  'plan-zapisz': () => planZapisz(reszta[0]),
   dodaj: () => dodaj(reszta[0]),
+  popraw: () => popraw('wydatki', reszta[0], reszta[1]),
+  usun: () => usunWpis('wydatki', reszta[0]),
   wplata: () => wplata(reszta[0]),
-  popraw: () => popraw(reszta[0], reszta[1]),
-  usun: () => usunWydatek(reszta[0]),
+  'wplata-popraw': () => popraw('wplaty', reszta[0], reszta[1]),
+  'wplata-usun': () => usunWpis('wplaty', reszta[0]),
+  krok: () => krok(reszta[0], reszta[1]),
+  'kroki-usun': () => krokiUsun(reszta[0]),
+  'profil-ustaw': () => profilUstaw(reszta[0]),
+  'plan-zapisz': () => planZapisz(reszta[0]),
+  'plan-popraw': () => planPopraw(reszta[0]),
+  pokaz: () => pokaz(reszta[0]),
+  zapisz: () => zapisz(reszta[0], reszta[1]),
+  scal: () => scal(reszta[0], reszta[1]),
+  skasuj: () => skasuj(reszta[0]),
 };
 
 if (!komendy[komenda]) {
-  console.error(`Użycie: npm run baza <${Object.keys(komendy).join('|')}>`);
+  console.error(`Użycie: npm run baza <komenda> [argumenty]
+
+Odczyt
+  stan                          co jest w bazie
+  wydatki [RRRR-MM]             lista wydatków, ostatnia kolumna to id
+  wplaty  [RRRR-MM]             lista wpłat na poduszkę
+  kroki   [RRRR-MM]             odhaczone kroki miesiąca
+  profil                        preferencje widoku
+  plan                          zrzut planu
+
+Wydatki
+  dodaj  '{"kwota":12.99,"opis":"kawa","kategoria":"spozywcze","sklep":"Żabka"}'
+  popraw <id> '{"kategoria":"wyjazdy"}'
+  usun   <id>
+
+Poduszka
+  wplata        '{"kwota":100,"opis":"Nagroda z banku","zrodlo":"dodatkowy"}'
+  wplata-popraw <id> '{"kwota":120}'
+  wplata-usun   <id>
+
+Kroki miesiąca i profil
+  krok         2026-09 '{"r-przelewy":true}'
+  kroki-usun   2026-09
+  profil-ustaw '{"zwinieteKarty":{"fundusz":true}}'
+
+Plan
+  plan-zapisz <plik.json>       podmiana całości, z kopią starego planu
+  plan-popraw '{"budzetBiezacy":7800}'   podmiana wybranych pól, też z kopią
+
+Surowo, bez walidacji — @ oznacza uid
+  pokaz  <sciezka>              @ | @wydatki | @wydatki/<id> | plany/@
+  zapisz <sciezka> '<json>'     nadpisuje cały dokument
+  scal   <sciezka> '<json>'     podmienia tylko podane pola
+  skasuj <sciezka>              wypisuje treść, potem kasuje`);
   process.exit(1);
 }
 
