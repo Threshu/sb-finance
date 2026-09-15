@@ -131,7 +131,7 @@ body::after {
   .kolumna.szeroka { grid-column: 1 / -1; }
 }
 
-/* Pełny desktop: trzy kolumny, lewa szersza (mieści budżet i przepływ). */
+/* Pełny desktop: trzy kolumny, lewa szersza (mieści budżet i miernik). */
 @media (min-width: 1360px) {
   .panel { grid-template-columns: 1.35fr 1fr 1fr; }
   .kolumna.szeroka { grid-column: auto; }
@@ -718,8 +718,7 @@ select:focus {
 
 .strzalka { color: var(--faint); flex-shrink: 0; }
 
-.krok .uwaga,
-.pozycja .uwaga {
+.krok .uwaga {
   display: block;
   font-size: var(--fs-xs);
   color: var(--brass-deep);
@@ -727,140 +726,18 @@ select:focus {
   margin-top: 4px;
 }
 
-.rozbicie {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 11px;
-  padding-left: 12px;
-  border-left: 2px solid var(--line);
-}
-
-.pozycja {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-wrap: wrap;
-}
-
-.pozycja .kwota {
-  font-size: var(--fs-sm);
-  color: var(--brass);
-  min-width: 76px;
-}
-
-.pozycja .po-co {
-  font-size: var(--fs-xs);
-  color: var(--faint);
-  flex-basis: 100%;
-}
-
-.krok[data-zrobione='true'] .rozbicie,
 .krok[data-zrobione='true'] .trasa {
   opacity: 0.45;
 }
 
-/* ── Przepływ miesiąca ──────────────────────────────────── */
-
-.przeplyw {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.etap {
-  position: relative;
-  padding: 13px 0 13px 18px;
-  border-left: 2px solid var(--line);
-}
-
-.etap.zrodlo { border-left-color: var(--brass-deep); }
-.etap.zostaje { border-left-color: var(--brass); }
-.etap.rozdzial { border-left-color: var(--sage); }
-
-.etap::before {
-  content: '';
-  position: absolute;
-  left: -5px;
-  top: 17px;
-  width: 8px;
-  height: 8px;
-  border-radius: 99px;
-  background: var(--line);
-}
-
-.etap.zrodlo::before { background: var(--brass-deep); }
-.etap.zostaje::before { background: var(--brass); }
-.etap.rozdzial::before { background: var(--sage); }
-
-.etap-kwota {
-  display: block;
-  font-size: var(--fs-lg);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-}
-
-.etap-kwota.akcent { color: var(--brass); }
-
-.etap-opis {
-  display: block;
-  font-size: var(--fs-xs);
-  color: var(--dim);
-  margin-top: 1px;
-}
-
-/* To są zdania, nie etykiety — „Najpierw odkładasz, to nie są twoje pieniądze"
-   coś znaczy, więc nie ma powodu dusić tego w drobnych capsach z rozstrzeloną
-   spacją. Czcionka jak w reszcie treści, tylko przygaszona. */
-.etap-naglowek {
-  display: block;
-  font-size: var(--fs-sm);
-  color: var(--dim);
-  margin-bottom: 8px;
-}
-
-.wiersz-przeplyw {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.wiersz-przeplyw:last-child { border-bottom: none; padding-bottom: 0; }
-
-.wiersz-przeplyw .opis {
-  font-size: var(--fs-sm);
-  color: var(--dim);
-  min-width: 0;
-}
-
-.wiersz-przeplyw .opis .glowny {
-  display: block;
-  color: var(--ink);
-  font-size: var(--fs-base);
-}
-
-.wiersz-przeplyw .wartosc {
-  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
-  font-variant-numeric: tabular-nums;
-  font-size: var(--fs-base);
-  white-space: nowrap;
-  text-align: right;
-}
-
-.wiersz-przeplyw.cel .wartosc { color: var(--brass); }
-
-.wiersz-przeplyw .termin {
-  display: block;
-  font-size: var(--fs-micro);
-  color: var(--faint);
-  letter-spacing: 0.06em;
-}
-
 .notka.roznica { color: var(--rust); }
+
+/* Ostrzeżenie przy wpisie wydatku. Zwykła notka jest z założenia szara i
+   łatwo ją minąć wzrokiem — ta zatrzymuje zapis, więc musi być widoczna. */
+.notka.ostrzezenie {
+  color: var(--rust);
+  font-size: var(--fs-sm);
+}
 
 /* ── Kamienie milowe ────────────────────────────────────── */
 

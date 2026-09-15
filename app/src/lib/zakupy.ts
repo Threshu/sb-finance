@@ -8,8 +8,16 @@
  */
 
 import {
+  kluczMiesiaca,
+  miesiaceOd,
+  skladkaFunduszu,
+  type Plan,
+} from './plan';
+import {
+  czyPozaBudzetem,
   KATEGORIE,
   KATEGORIA_DOMYSLNA,
+  KATEGORIA_FIRMA,
   KATEGORIA_FUNDUSZ,
   typKategorii,
   TYPY,
@@ -54,42 +62,86 @@ export function kluczMiesiacaWydatku(w: Wydatek): string {
   return w.data.slice(0, 7);
 }
 
-/* ── Fundusz nieregularny ───────────────────────────────────
-   Osobne subkonto, osobna kieszeń: dentysta, opony, sprzęt, prezenty.
-   Wszystko, co liczy „ile wydałem z budżetu", musi te wydatki pominąć,
-   inaczej duży, rzadki zakup wyglądałby na przekroczony miesiąc. */
+/* ── Poza budżetem ──────────────────────────────────────────
+   Fundusz nieregularny to osobne subkonto, osobna kieszeń: dentysta, opony,
+   sprzęt, prezenty. Koszty firmy schodzą jeszcze wcześniej, z konta
+   firmowego. Wszystko, co liczy „ile wydałem z budżetu", musi jedne i drugie
+   pominąć — inaczej duży, rzadki zakup wyglądałby na przekroczony miesiąc,
+   a przelew do ZUS-u policzyłby się drugi raz. Listę trzyma `POZA_BUDZETEM`
+   w kategoriach. */
 
 export function budzetowe(wydatki: Wydatek[]): Wydatek[] {
-  return wydatki.filter((w) => w.kategoria !== KATEGORIA_FUNDUSZ);
+  return wydatki.filter((w) => !czyPozaBudzetem(w.kategoria));
 }
 
 export function funduszowe(wydatki: Wydatek[]): Wydatek[] {
   return wydatki.filter((w) => w.kategoria === KATEGORIA_FUNDUSZ);
 }
 
-/** Składki naliczone od startu planu, z bieżącym miesiącem włącznie. */
-function miesiecySkladek(start: string, dzis: Date): number {
-  const [rok, miesiac] = start.slice(0, 7).split('-').map(Number);
-  const ile = (dzis.getFullYear() - rok) * 12 + (dzis.getMonth() + 1 - miesiac) + 1;
-  return Math.max(ile, 0);
+/**
+ * Koszty firmy zapisane mimo ostrzeżenia. Nie wchodzą do budżetu, ale nie
+ * mogą też zniknąć bez śladu — kartę budżetu stać na jeden wiersz, żeby było
+ * widać, że wpis gdzieś jest.
+ */
+export function firmowe(wydatki: Wydatek[]): Wydatek[] {
+  return wydatki.filter((w) => w.kategoria === KATEGORIA_FIRMA);
 }
 
+/** Id kroku, którym odhaczasz przelew na fundusz — z planu, nie z kodu. */
+export function krokFunduszu(plan: Plan): string | undefined {
+  return plan.rozdysponowanie.kroki.find((k) => k.kwotaZ === 'fundusz')?.id;
+}
+
+export type StanFunduszu = {
+  saldo: number;
+  /** Co leżało na subkoncie przed startem planu. */
+  startowe: number;
+  /** Miesiące, w których przelew jest odhaczony. */
+  skladki: number;
+  wplacone: number;
+  wydane: number;
+  /** Miesiące od startu planu bez odhaczonego przelewu, od najstarszego. */
+  zalegle: string[];
+  /** Czy przelew za bieżący miesiąc jest już odhaczony. */
+  biezacyZrobiony: boolean;
+};
+
 /**
- * Stan funduszu liczony, nie wpisywany: składki minus to, co z niego poszło.
- * Zakłada, że comiesięczny przelew faktycznie robisz — pilnuje tego checklista
- * rozdysponowania. Gdy saldo rozjedzie się z kontem, to znaczy, że któryś
- * przelew wypadł, i wtedy poprawiamy plan, a nie liczbę tutaj.
+ * Stan funduszu liczony z faktów, nie z założeń.
+ *
+ * Wcześniej saldo rosło samo: tyle miesięcy od startu planu razy składka —
+ * apka zakładała, że każdy przelew się odbył. Przy pierwszym pominiętym
+ * przelewie pokazywała pieniądze, których na subkoncie nie ma, i nie dało się
+ * tego poprawić inaczej niż w bazie.
+ *
+ * Teraz składka wchodzi do salda dopiero wtedy, gdy odhaczysz przelew
+ * w Rozdysponowaniu. Ten sam ptaszek, który mówi „zrobione", dokłada
+ * pieniądze — jedno kliknięcie, jedno źródło prawdy.
  */
 export function stanFunduszu(
   wydatki: Wydatek[],
-  skladka: number,
-  start: string,
+  plan: Plan,
+  kroki: Record<string, Record<string, boolean>>,
   dzis: Date = new Date(),
-): { saldo: number; skladki: number; wplacone: number; wydane: number } {
-  const skladki = miesiecySkladek(start, dzis);
-  const wplacone = skladki * skladka;
+): StanFunduszu {
+  const id = krokFunduszu(plan);
+  const miesiace = miesiaceOd(plan.start, dzis);
+  const biezacy = kluczMiesiaca(dzis);
+
+  const odhaczone = id ? miesiace.filter((m) => kroki[m]?.[id]) : [];
+  const startowe = plan.funduszSaldoStartowe ?? 0;
+  const wplacone = odhaczone.reduce((s, m) => s + skladkaFunduszu(plan, m), 0);
   const wydane = funduszowe(wydatki).reduce((s, w) => s + w.kwota, 0);
-  return { saldo: wplacone - wydane, skladki, wplacone, wydane };
+
+  return {
+    saldo: startowe + wplacone - wydane,
+    startowe,
+    skladki: odhaczone.length,
+    wplacone,
+    wydane,
+    zalegle: id ? miesiace.filter((m) => m !== biezacy && !kroki[m]?.[id]) : [],
+    biezacyZrobiony: Boolean(id && kroki[biezacy]?.[id]),
+  };
 }
 
 /* ── Podsumowania ───────────────────────────────────────── */

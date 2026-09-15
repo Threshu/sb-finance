@@ -115,6 +115,7 @@ Ikonę i tryb pełnoekranowy opisuje [`public/manifest.json`](public/manifest.js
 | `src/lib/kategorie.ts` | kategorie wydatków, podział na typy, kolory |
 | `src/lib/sugestie.ts` | podpowiedzi formularza liczone z historii |
 | `src/components/Karta.tsx` | zwijana karta panelu — jedyne miejsce z tą logiką |
+| `src/components/Checklista.tsx` | listy z ptaszkiem: ikona, przycisk, pasek postępu |
 | `baza.mjs` | dostęp do Firestore z wiersza poleceń |
 | `sprawdz-wyciek.mjs` | kontrola, czy plan nie trafił do publicznego buildu |
 

@@ -47,8 +47,9 @@ export const KATEGORIE: Kategoria[] = [
   { id: 'suplementy', nazwa: 'Suplementy', typ: 'zmienny' },
   { id: 'subskrypcje', nazwa: 'Subskrypcje', typ: 'staly' },
   // Koszty JDG, które i tak przechodzą przez to samo konto — księgowość,
-  // narzędzia firmowe. Osobno od subskrypcji, bo to inny rodzaj kosztu
-  // (prowadzenie firmy), nie osobista usługa.
+  // narzędzia firmowe, przedpłata na ZUS. Osobno od subskrypcji, bo to inny
+  // rodzaj kosztu (prowadzenie firmy), nie osobista usługa. Nie liczy się do
+  // budżetu bieżącego — patrz POZA_BUDZETEM niżej.
   { id: 'firma', nazwa: 'Firma', typ: 'staly' },
   { id: 'rozrywka', nazwa: 'Rozrywka i gry', typ: 'uznaniowy' },
   { id: 'zaklady', nazwa: 'Zakłady i gry losowe', typ: 'uznaniowy' },
@@ -66,8 +67,29 @@ export const KATEGORIE: Kategoria[] = [
 
 export const KATEGORIA_DOMYSLNA = 'inne';
 
-/** Wydatki z tej kategorii stoją poza budżetem bieżącym. */
+/** Wydatki z tej kategorii rozlicza karta Funduszu, nie budżet. */
 export const KATEGORIA_FUNDUSZ = 'fundusz';
+
+/** Koszty prowadzenia firmy, które przeszły przez prywatną kartę. */
+export const KATEGORIA_FIRMA = 'firma';
+
+/* ── Co stoi poza budżetem bieżącym ─────────────────────────
+   Budżet bieżący to jedna kieszeń: pieniądze, które po rozdysponowaniu
+   zostają na koncie osobistym na dany miesiąc. Dwie rzeczy do niej nie
+   należą, każda z innego powodu:
+
+     fundusz — idzie z subkonta, nie z tej kieszeni;
+     firma   — podatki, ZUS i koszty JDG schodzą wcześniej, na koncie
+               firmowym. Budżet ich nie obejmuje, więc wpisane tutaj
+               liczyłyby się drugi raz i zjadały limit, którego nie dotykają.
+
+   Wpis zostaje w bazie (historia ma być pełna), ale nie wchodzi do sum
+   miesiąca. Do samego wpisywania jest jeszcze ostrzeżenie niżej. */
+export const POZA_BUDZETEM: string[] = [KATEGORIA_FUNDUSZ, KATEGORIA_FIRMA];
+
+export function czyPozaBudzetem(id: string | undefined): boolean {
+  return POZA_BUDZETEM.includes(id ?? '');
+}
 
 const WG_ID = new Map(KATEGORIE.map((k) => [k.id, k]));
 
@@ -421,4 +443,57 @@ export function rozpoznajKategorie(opis: string): string | undefined {
     if (regula.slowa.some((s) => tekst.includes(s))) return regula.kategoria;
   }
   return undefined;
+}
+
+/* ── Ostrzeżenie: to nie jest wydatek z budżetu ─────────────
+   ZUS, ryczałt i składka zdrowotna schodzą z konta firmowego, w
+   rozdysponowaniu, zanim budżet w ogóle powstanie. Wpisane jako wydatek
+   liczą się drugi raz i zjadają limit, którego nie dotykają — a przy
+   wpisywaniu z telefonu nikt tego nie pamięta. Stąd ostrzeżenie w formularzu
+   i w `baza dodaj`.
+
+   Na liście stoją wyłącznie nazwy urzędowe i pospolite. Żadnej marki, biura
+   ani banku — z tego samego powodu co w REGULY wyżej. */
+export const SLOWA_FIRMOWE = [
+  'zus',
+  'zdrowotna',
+  'ryczalt',
+  'ryczałt',
+  'podatek dochodowy',
+  'zaliczka na podatek',
+  'urzad skarbowy',
+  'urząd skarbowy',
+  'skarbowka',
+  'skarbówka',
+  'mikrorachunek',
+  'jpk',
+  'vat',
+  'ksiegowosc',
+  'księgowość',
+  'biuro rachunkowe',
+  'koszt firmowy',
+];
+
+/* Granice słowa, a nie zwykłe `includes`: „vat" siedzi w środku niejednego
+   słowa, a „zus" w niejednym imieniu. Diakrytyki nie są znakami słowa dla
+   \b, ale to nie szkodzi — brzegi wzorców i tak wypadają na literach ASCII
+   albo na spacji. */
+const WZORZEC_FIRMOWY = new RegExp(`\\b(${SLOWA_FIRMOWE.join('|')})\\b`, 'i');
+
+/**
+ * Zdanie do pokazania, gdy wpis wygląda na obciążenie firmowe — albo
+ * `undefined`, gdy wszystko w porządku. Sprawdza opis, sklep i kategorię,
+ * bo każde z nich osobno zdradza to samo.
+ */
+export function ostrzezenieFirmowe(
+  opis: string,
+  sklep?: string,
+  kategoria?: string,
+): string | undefined {
+  if (kategoria === KATEGORIA_FIRMA) {
+    return 'Kategoria „Firma" stoi poza budżetem bieżącym — wpis zostanie zapisany, ale nie wejdzie do sum miesiąca.';
+  }
+  const trafienie = WZORZEC_FIRMOWY.exec(`${opis} ${sklep ?? ''}`);
+  if (!trafienie) return undefined;
+  return `„${trafienie[0]}" wygląda na obciążenie firmowe. Podatki, ZUS i koszty JDG schodzą wcześniej z konta firmowego — budżet bieżący ich nie obejmuje i tutaj policzą się drugi raz. Jeśli to naprawdę wydatek z konta osobistego, wybierz kategorię „Firma".`;
 }

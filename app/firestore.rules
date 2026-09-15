@@ -25,8 +25,14 @@ service cloud.firestore {
     }
 
     // Osobna kolekcja, bo plan zmienia się rzadko i czyta się go w całości.
+    //
+    // Apka plan WYŁĄCZNIE czyta — zapisuje go `npm run baza plan-zapisz`,
+    // który chodzi na kluczu konta serwisowego i reguł nie dotyka. Zamknięty
+    // zapis z przeglądarki znaczy, że przejęta sesja nie podmieni planu,
+    // a przypadkowy zapis z kodu apki padnie od razu, a nie po cichu.
     match /plany/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
     }
 
     // Wszystko poza powyższym jest zamknięte.

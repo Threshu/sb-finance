@@ -38,7 +38,16 @@ const ETYKIETY_OGOLNE = new Set([
   'Poduszka bezpieczeństwa',
   'Fundusz nieregularny',
   'Budżet bieżący',
-  'r-fundusz',
+  // Wartości pola `kwotaZ` w krokach rozdysponowania: mówią, skąd krok bierze
+  // kwotę, a nie czyja ona jest. Muszą stać i w planie, i w kodzie, bo to one
+  // łączą jedno z drugim.
+  'budzet',
+  'fundusz',
+  'obciazenie',
+  // Wartości pola `podstawa` w kamieniach milowych — nazwy pól planu,
+  // z tego samego powodu co wyżej.
+  'kosztyTwarde',
+  'celMinimum',
   'od ręki',
   'srednia',
   'wysoka',

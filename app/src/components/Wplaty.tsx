@@ -7,18 +7,23 @@ import { Karta } from './Karta';
 import { zlDokladnie, dni } from '@/lib/format';
 import type { Wplata } from '@/lib/store';
 
+function dzisiaj(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function Wplaty({
   wplaty,
   dodaj,
   usun,
 }: {
   wplaty: Wplata[];
-  dodaj: (kwota: number, opis: string, zrodlo: 'plan' | 'dodatkowy') => void;
+  dodaj: (kwota: number, opis: string, zrodlo: 'plan' | 'dodatkowy', data?: string) => void;
   usun: (id: string) => void;
 }) {
   const plan = usePlan();
   const [kwota, ustawKwote] = useState('');
   const [opis, ustawOpis] = useState('');
+  const [data, ustawDate] = useState(dzisiaj);
   const [potwierdzenie, ustawPotwierdzenie] = useState<string | null>(null);
   const [blad, ustawBlad] = useState<string | null>(null);
   const zegar = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -51,7 +56,7 @@ export function Wplaty({
       return;
     }
     ustawBlad(null);
-    dodaj(liczba, opis.trim() || (zrodlo === 'plan' ? 'Wpłata planowa' : 'Dodatkowy wpływ'), zrodlo);
+    dodaj(liczba, opis.trim() || (zrodlo === 'plan' ? 'Wpłata planowa' : 'Dodatkowy wpływ'), zrodlo, data);
     if (zegar.current) clearTimeout(zegar.current);
     if (zrodlo === 'dodatkowy') {
       ustawPotwierdzenie(`Cel bliżej o ${dni(przyspieszenieWDniach(plan, liczba))}.`);
@@ -61,6 +66,7 @@ export function Wplaty({
     }
     ustawKwote('');
     ustawOpis('');
+    ustawDate(dzisiaj());
   }
 
   return (
@@ -85,6 +91,16 @@ export function Wplaty({
           onChange={(e) => ustawOpis(e.target.value)}
           aria-label="Opis wpłaty"
           style={{ flex: '2 1 180px' }}
+        />
+        {/* Przelew robi się przy rozdysponowaniu, a wpisuje wieczorem —
+            bez tego pola wpłata siadałaby na dniu wpisania. */}
+        <input
+          type="date"
+          value={data}
+          max={dzisiaj()}
+          onChange={(e) => ustawDate(e.target.value)}
+          aria-label="Data wpłaty"
+          style={{ flex: '1 1 140px' }}
         />
       </div>
 

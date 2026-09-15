@@ -27,15 +27,6 @@ export type DataKluczowa = {
   bank?: string;
 };
 
-/** Jeden przelew w ramach kroku — ile, dokąd i po co. */
-export type Pozycja = {
-  /** null = kwota zmienna, liczona z planu na dany miesiąc. */
-  kwota: number | null;
-  dokad: string;
-  poCo: string;
-  uwaga?: string;
-};
-
 export type KrokMiesiaca = {
   id: string;
   /** Nagłówek grupy, np. „1. dnia miesiąca". */
@@ -45,9 +36,7 @@ export type KrokMiesiaca = {
   skad?: string;
   dokad?: string;
   kwota?: number;
-  kiedy?: string;
   uwaga?: string;
-  pozycje?: Pozycja[];
   /** Okno obowiązywania, RRRR-MM. Promocje bankowe mają daty ważności. */
   od?: string;
   do?: string;
@@ -107,11 +96,22 @@ export type Obciazenie = {
   do?: string;
 };
 
+/**
+ * Wpływ i to, co z niego schodzi, zanim pieniądze staną się twoje.
+ * Nie ma tu konta docelowego — trasę przelewu trzyma każdy krok
+ * rozdysponowania osobno (`skad`/`dokad`), a dwa zapisy tej samej rzeczy
+ * rozjeżdżały się przy pierwszej zmianie banku.
+ */
 export type Przeplyw = {
   zrodlo: string;
-  /** Konto, na które wpływa faktura. Musi zgadzać się z `skad` kroków rozdysponowania. */
-  konto: string;
   kwotaBrutto: number;
+  /**
+   * Faktura bywa inna niż typowa — niepełny miesiąc, dwie faktury, przerwa.
+   * Wpisz tu miesiąc i prawdziwą kwotę (`{"2026-09": 11333.33}`), a cała
+   * checklista przeliczy się sama: podatki zostają, reszta na poduszkę
+   * schodzi o tyle, o ile faktycznie mniej wpłynęło.
+   */
+  kwotaBruttoWyjatki?: Record<string, number>;
   obciazenia: Obciazenie[];
 };
 
@@ -126,9 +126,31 @@ export type KrokRozdysponowania = {
   opis: string;
   /** null = reszta po podatkach i pozostałych przelewach, liczona z planu. */
   kwota?: number | null;
+  /**
+   * Skąd wziąć kwotę, zamiast wpisywać ją w kroku drugi raz.
+   *
+   * Każda liczba w planie ma mieszkać w jednym miejscu. Przelew budżetowy
+   * stał tu kiedyś jako 7 100 zł w miesiącu, w którym budżet wynosił 7 663 —
+   * checklista kazała przelać za mało, a reszta na poduszkę liczyła się już
+   * od prawdziwego budżetu, więc różnica wychodziła jako „nieprzypisane".
+   * Ten sam błąd czekał na ryczałcie: krok miał 1 377 zł bez okna czasowego,
+   * a od października stawka rośnie.
+   *
+   *   'budzet'     — budżet miesiąca, razem z `budzetyWyjatki`
+   *   'fundusz'    — składka na fundusz nieregularny
+   *   'obciazenie' — obciążenie z przepływu, wskazane polem `obciazenie`
+   */
+  kwotaZ?: 'budzet' | 'fundusz' | 'obciazenie';
+  /**
+   * Ułamek reszty przy `kwota: null` — np. 0.25 na część płynną poduszki
+   * i 0.75 na obligacje. Dzielona jest reszta, nie planowana wpłata, więc
+   * przelewy zawsze sumują się do tego, co faktycznie zostało.
+   */
+  udzial?: number;
+  /** Nazwa obciążenia z `przeplyw.obciazenia` — używane przy `kwotaZ: 'obciazenie'`. */
+  obciazenie?: string;
   skad?: string;
   dokad?: string;
-  kiedy?: string;
   uwaga?: string;
   /** YYYY-MM — krok pojawia się dopiero od tego miesiąca. */
   od?: string;
@@ -142,7 +164,20 @@ export type Rozdysponowanie = {
 };
 
 export type Kamien = {
-  kwota: number;
+  /** Kwota wpisana wprost. Pomijana, gdy stoi `podstawa`. */
+  kwota?: number;
+  /**
+   * Kwota liczona z planu, żeby nie stała tu drugi raz:
+   *
+   *   'kosztyTwarde' × `razy` — „miesiąc oddechu", „kwartał"
+   *   'celMinimum'            — próg sześciu miesięcy
+   *   'cel'                   — koniec etapu
+   *
+   * Podniesienie kosztów twardych przesuwa wtedy kamienie samo, zamiast
+   * zostawiać progi policzone od starej kwoty.
+   */
+  podstawa?: 'kosztyTwarde' | 'cel' | 'celMinimum';
+  razy?: number;
   tytul: string;
   opis: string;
 };
@@ -165,6 +200,14 @@ export type Plan = {
   /** Budżet na wskazane miesiące, gdy różni się od `budzetBiezacy`. */
   budzetyWyjatki?: Record<string, number>;
   funduszNieregularny: number;
+  /**
+   * Co leżało na subkoncie w dniu startu planu. Bez tego pola fundusz zaczyna
+   * od zera, a składki sprzed `start` nie mają jak wejść do salda — tak samo
+   * jak `saldoStartowe` dla poduszki.
+   */
+  funduszSaldoStartowe?: number;
+  /** Wyjątki składki funduszu w pojedynczych miesiącach, jak `budzetyWyjatki`. */
+  funduszWyjatki?: Record<string, number>;
   /**
    * Ile fundusz ma unieść bez wysychania — największy pojedynczy wydatek
    * nieregularny, jaki realnie się zdarzył. Poniżej tego poziomu przelewasz
@@ -238,8 +281,11 @@ export function sprawdzPlan(dane: unknown): WynikSprawdzenia {
   if (typeof p.wplatyWyjatki !== 'object' || p.wplatyWyjatki === null) {
     bledy.push('Pole „wplatyWyjatki" musi być obiektem.');
   }
-  if (p.budzetyWyjatki !== undefined && (typeof p.budzetyWyjatki !== 'object' || p.budzetyWyjatki === null)) {
-    bledy.push('Pole „budzetyWyjatki" musi być obiektem.');
+  for (const pole of ['budzetyWyjatki', 'funduszWyjatki'] as const) {
+    const v = p[pole];
+    if (v !== undefined && (typeof v !== 'object' || v === null)) {
+      bledy.push(`Pole „${pole}" musi być obiektem.`);
+    }
   }
   if (!Array.isArray(p.krokiMiesiaca) || p.krokiMiesiaca.length === 0) {
     bledy.push('Brakuje kroków miesiąca.');
@@ -250,9 +296,40 @@ export function sprawdzPlan(dane: unknown): WynikSprawdzenia {
     bledy.push('Sekcja „przeplyw" jest niekompletna.');
   }
 
+  /* Warstwy dzielą docelową poduszkę. Gdy przestaną się sumować do celu,
+     karta kamieni pokazuje podział, który nie prowadzi tam, gdzie trzeba —
+     a to widać dopiero po zsumowaniu w głowie. */
+  if (Array.isArray(p.warstwyPoduszki) && typeof p.cel === 'number') {
+    const suma = (p.warstwyPoduszki as WarstwaPoduszki[]).reduce((a, w) => a + (w?.docelowo ?? 0), 0);
+    if (suma !== p.cel) {
+      bledy.push(`Warstwy poduszki sumują się do ${suma}, a cel to ${p.cel}.`);
+    }
+  }
+
   const rozdysponowanie = p.rozdysponowanie as Rozdysponowanie | undefined;
   if (!rozdysponowanie || !Array.isArray(rozdysponowanie.kroki)) {
     bledy.push('Sekcja „rozdysponowanie" jest niekompletna.');
+  } else {
+    /* Krok bierze kwotę z obciążenia po nazwie. Literówka w nazwie nie
+       wywala apki — krok po prostu stoi bez kwoty, czyli po cichu przestaje
+       mówić, ile przelać. Lepiej złapać to tutaj. */
+    const nazwy = new Set((przeplyw?.obciazenia ?? []).map((o) => o.nazwa));
+    for (const k of rozdysponowanie.kroki) {
+      if (k.udzial !== undefined) {
+        if (k.kwota !== null) {
+          bledy.push(`Krok „${k.id}": „udzial" działa tylko przy „kwota: null" (dzieli resztę).`);
+        }
+        if (typeof k.udzial !== 'number' || k.udzial <= 0 || k.udzial > 1) {
+          bledy.push(`Krok „${k.id}": „udzial" musi być ułamkiem z przedziału (0, 1].`);
+        }
+      }
+      if (k.kwotaZ !== 'obciazenie') continue;
+      if (!k.obciazenie) {
+        bledy.push(`Krok „${k.id}": przy „kwotaZ: obciazenie" trzeba podać pole „obciazenie".`);
+      } else if (!nazwy.has(k.obciazenie)) {
+        bledy.push(`Krok „${k.id}": w przepływie nie ma obciążenia „${k.obciazenie}".`);
+      }
+    }
   }
 
   // Promocje są opcjonalne, ale jeśli są — muszą mieć wypłaty z terminem
@@ -342,21 +419,66 @@ export function dniDo(iso: string, od: Date = new Date()): number {
 
 /* ── Liczenie — plan wchodzi jawnie ─────────────────────────── */
 
-/** Planowana wpłata w danym miesiącu (z uwzględnieniem wyjątków, np. ulgi na start). */
+/**
+ * Kwota miesięczna: stawka podstawowa albo wyjątek na ten jeden miesiąc.
+ *
+ * Podniesienie samej stawki przestawiłoby też miesiące zamknięte — wrzesień
+ * rozliczałby się nagle z budżetu ustalonego w listopadzie i całe „ile
+ * wydałem wobec budżetu" przestaje mieć sens wstecz. Dlatego każda kwota,
+ * która może się różnić w pojedynczym miesiącu, ma ten sam kształt:
+ * stawka + tabela wyjątków.
+ */
+function kwotaMiesiaca(
+  podstawa: number,
+  wyjatki: Record<string, number> | undefined,
+  klucz: string,
+): number {
+  return wyjatki?.[klucz] ?? podstawa;
+}
+
+/** Wpływ na konto firmowe w danym miesiącu — plan albo prawdziwa faktura. */
+function wplywDlaMiesiaca(plan: Plan, klucz: string): number {
+  return kwotaMiesiaca(plan.przeplyw.kwotaBrutto, plan.przeplyw.kwotaBruttoWyjatki, klucz);
+}
+
+/** Planowana wpłata na poduszkę w danym miesiącu. */
 export function wplataDlaMiesiaca(plan: Plan, klucz: string): number {
-  return plan.wplatyWyjatki[klucz] ?? plan.wplataMiesieczna;
+  return kwotaMiesiaca(plan.wplataMiesieczna, plan.wplatyWyjatki, klucz);
+}
+
+/** Budżet bieżący obowiązujący w danym miesiącu. */
+export function budzetDlaMiesiaca(plan: Plan, klucz: string): number {
+  return kwotaMiesiaca(plan.budzetBiezacy, plan.budzetyWyjatki, klucz);
+}
+
+/** Składka na fundusz nieregularny w danym miesiącu. */
+export function skladkaFunduszu(plan: Plan, klucz: string): number {
+  return kwotaMiesiaca(plan.funduszNieregularny, plan.funduszWyjatki, klucz);
 }
 
 /**
- * Budżet obowiązujący w danym miesiącu.
- *
- * Podniesienie samego `budzetBiezacy` przestawiłoby też miesiące zamknięte —
- * wrzesień rozliczałby się nagle z budżetu ustalonego w listopadzie i całe
- * „ile wydałem wobec budżetu" przestaje mieć sens wstecz.
+ * Klucze miesięcy od startu planu do dziś włącznie.
+ * Na tym stoi liczenie funduszu: sprawdzamy miesiąc po miesiącu, czy przelew
+ * został odhaczony, zamiast zakładać, że każdy się odbył.
  */
-export function budzetDlaMiesiaca(plan: Plan, klucz: string): number {
-  return plan.budzetyWyjatki?.[klucz] ?? plan.budzetBiezacy;
+export function miesiaceOd(start: string, dzis: Date = new Date()): string[] {
+  const [rok, miesiac] = start.slice(0, 7).split('-').map(Number);
+  const klucze: string[] = [];
+  const d = new Date(rok, miesiac - 1, 1);
+  const koniec = new Date(dzis.getFullYear(), dzis.getMonth(), 1);
+  while (d <= koniec) {
+    klucze.push(kluczMiesiaca(d));
+    d.setMonth(d.getMonth() + 1);
+  }
+  return klucze;
 }
+
+/**
+ * Jak daleko w przód liczy apka. Dziesięć lat: dłuższa projekcja przy tym
+ * tempie i tak nie mówi nic sensownego, a „poza zasięgiem" jest uczciwszą
+ * odpowiedzią niż data w 2050 roku.
+ */
+export const HORYZONT_MIESIECY = 120;
 
 /** Ile miesięcy przetrwasz bez dochodu przy twardych kosztach. */
 export function miesiacePrzetrwania(plan: Plan, saldo: number): number {
@@ -475,9 +597,9 @@ export function zostaloZPromocji(
 }
 
 /** Ile zostaje na koncie firmowym po odłożeniu podatków. */
-export function poPodatkach(plan: Plan, klucz = kluczMiesiaca(new Date())): number {
+function poPodatkach(plan: Plan, klucz = kluczMiesiaca(new Date())): number {
   const suma = obciazeniaMiesiaca(plan, klucz).reduce((s, o) => s + o.kwota, 0);
-  return plan.przeplyw.kwotaBrutto - suma;
+  return wplywDlaMiesiaca(plan, klucz) - suma;
 }
 
 /**
@@ -490,7 +612,7 @@ export function resztaNaPoduszke(
   klucz = kluczMiesiaca(new Date()),
   funduszPelny = false,
 ): number {
-  const skladka = funduszPelny ? 0 : plan.funduszNieregularny;
+  const skladka = funduszPelny ? 0 : skladkaFunduszu(plan, klucz);
   return poPodatkach(plan, klucz) - budzetDlaMiesiaca(plan, klucz) - skladka;
 }
 
@@ -519,6 +641,8 @@ export function rozdysponowanieWgFaz(
 
 export type StanKamienia = {
   kamien: Kamien;
+  /** Próg po rozwinięciu `podstawy` — to jest liczba do pokazania. */
+  prog: number;
   osiagniety: boolean;
   /** 0–1, postęp w obrębie tego kamienia. */
   postep: number;
@@ -528,28 +652,44 @@ export type StanKamienia = {
   nastepny: boolean;
 };
 
+/** Próg kamienia: wpisany wprost albo policzony z planu. */
+function kwotaKamienia(plan: Plan, kamien: Kamien): number {
+  switch (kamien.podstawa) {
+    case 'kosztyTwarde':
+      return plan.kosztyTwarde * (kamien.razy ?? 1);
+    case 'celMinimum':
+      return plan.celMinimum;
+    case 'cel':
+      return plan.cel;
+    default:
+      return kamien.kwota ?? 0;
+  }
+}
+
 /** Stan wszystkich kamieni milowych przy danym saldzie. */
 export function stanKamieni(plan: Plan, saldo: number): StanKamienia[] {
   let pierwszyOtwarty = true;
   return plan.kamienie.map((kamien, i) => {
-    const poprzedni = i === 0 ? 0 : plan.kamienie[i - 1].kwota;
-    const osiagniety = saldo >= kamien.kwota;
-    const zakres = kamien.kwota - poprzedni;
+    const prog = kwotaKamienia(plan, kamien);
+    const poprzedni = i === 0 ? 0 : kwotaKamienia(plan, plan.kamienie[i - 1]);
+    const osiagniety = saldo >= prog;
+    const zakres = prog - poprzedni;
     const postep = osiagniety ? 1 : Math.max(0, Math.min(1, (saldo - poprzedni) / zakres));
     const nastepny = !osiagniety && pierwszyOtwarty;
     if (!osiagniety) pierwszyOtwarty = false;
     return {
       kamien,
+      prog,
       osiagniety,
       postep,
-      brakuje: osiagniety ? 0 : kamien.kwota - saldo,
+      brakuje: osiagniety ? 0 : prog - saldo,
       nastepny,
     };
   });
 }
 
 export type Projekcja = {
-  /** Miesiąc, w którym saldo osiąga cel. null, jeśli nie osiąga w 120 miesięcy. */
+  /** Miesiąc, w którym saldo osiąga cel. null, jeśli nie osiąga w horyzoncie. */
   miesiacCelu: string | null;
   miesiecyDoCelu: number | null;
   /** Miesiąc osiągnięcia minimum bezpieczeństwa. */
@@ -582,7 +722,7 @@ export function projekcja(plan: Plan, saldo: number, od: Date = new Date()): Pro
     };
   }
 
-  for (let i = 1; i <= 120; i++) {
+  for (let i = 1; i <= HORYZONT_MIESIECY; i++) {
     kursor.setMonth(kursor.getMonth() + 1);
     const klucz = kluczMiesiaca(kursor);
     biezace += wplataDlaMiesiaca(plan, klucz);

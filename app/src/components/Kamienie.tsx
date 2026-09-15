@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  HORYZONT_MIESIECY,
   stanKamieni,
   kluczMiesiaca,
   nazwaMiesiaca,
@@ -14,7 +15,7 @@ import { zl } from '@/lib/format';
 function kiedyOsiagniesz(plan: Plan, brakuje: number): string | null {
   if (plan.wplataMiesieczna <= 0) return null;
   const miesiecy = Math.ceil(brakuje / plan.wplataMiesieczna);
-  if (miesiecy > 120) return null;
+  if (miesiecy > HORYZONT_MIESIECY) return null;
   const d = new Date();
   d.setMonth(d.getMonth() + miesiecy);
   return nazwaMiesiaca(kluczMiesiaca(d));
@@ -51,12 +52,12 @@ export function Kamienie({ saldo }: { saldo: number }) {
       }
     >
       <ol className="kamienie">
-        {stany.map(({ kamien, osiagniety, postep, brakuje, nastepny }) => {
+        {stany.map(({ kamien, prog, osiagniety, postep, brakuje, nastepny }) => {
           const termin = nastepny ? kiedyOsiagniesz(plan, brakuje) : null;
           return (
             <li
               className="kamien"
-              key={kamien.kwota}
+              key={kamien.tytul}
               data-osiagniety={osiagniety}
               data-nastepny={nastepny}
             >
@@ -65,7 +66,7 @@ export function Kamienie({ saldo }: { saldo: number }) {
               <div className="kamien-tresc">
                 <div className="kamien-glowka">
                   <span className="tytul">{kamien.tytul}</span>
-                  <span className="mono prog">{zl(kamien.kwota)}</span>
+                  <span className="mono prog">{zl(prog)}</span>
                 </div>
 
                 <span className="podpis">{kamien.opis}</span>

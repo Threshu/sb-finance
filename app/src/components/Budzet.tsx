@@ -8,7 +8,12 @@ import {
 import { usePlan } from '@/lib/PlanKontekst';
 import { Karta } from './Karta';
 import { zl, zlDokladnie } from '@/lib/format';
-import { KATEGORIE, KATEGORIA_DOMYSLNA, rozpoznajKategorie } from '@/lib/kategorie';
+import {
+  KATEGORIE,
+  KATEGORIA_DOMYSLNA,
+  ostrzezenieFirmowe,
+  rozpoznajKategorie,
+} from '@/lib/kategorie';
 import {
   czesteWpisy,
   kategoriaSklepu,
@@ -17,7 +22,7 @@ import {
   sklepyKategorii,
   wszystkieSklepy,
 } from '@/lib/sugestie';
-import { budzetowe } from '@/lib/zakupy';
+import { budzetowe, firmowe } from '@/lib/zakupy';
 import type { Wydatek } from '@/lib/store';
 
 function dzisiaj(): string {
@@ -49,6 +54,8 @@ export function Budzet({
   const [kategoria, ustawKategorie] = useState(KATEGORIA_DOMYSLNA);
   // Dopóki nie wybierzesz kategorii ręcznie, podpowiada ją opis albo sklep.
   const [kategoriaRecznie, ustawKategorieRecznie] = useState(false);
+  // Pierwsze kliknięcie przy ostrzeżeniu tylko je potwierdza, nie zapisuje.
+  const [mimoOstrzezenia, ustawMimoOstrzezenia] = useState(false);
   const poleKwoty = useRef<HTMLInputElement>(null);
 
   const liczba = Number(kwota.replace(',', '.'));
@@ -76,6 +83,14 @@ export function Budzet({
   // nie liczy, więc lista i kwota muszą stać na tej samej podstawie.
   const wTymMiesiacu = budzetowe(wydatki).filter((w) => w.data.startsWith(klucz));
 
+  // Wpisy firmowe zostają w historii, ale poza sumą miesiąca — jeden wiersz
+  // niżej mówi, że gdzieś są, żeby nie wyglądało na zgubiony wydatek.
+  const firmoweWTym = firmowe(wydatki)
+    .filter((w) => w.data.startsWith(klucz))
+    .reduce((s, w) => s + w.kwota, 0);
+
+  const ostrzezenie = ostrzezenieFirmowe(opis, sklep, kategoria);
+
   const budzet = budzetDlaMiesiaca(plan, klucz);
   const zostalo = budzet - wydane;
   const procent = Math.min((wydane / budzet) * 100, 100);
@@ -88,6 +103,7 @@ export function Budzet({
 
   function zmienOpis(nowy: string) {
     ustawOpis(nowy);
+    ustawMimoOstrzezenia(false);
     if (!kategoriaRecznie) ustawKategorie(rozpoznajKategorie(nowy) ?? KATEGORIA_DOMYSLNA);
   }
 
@@ -98,6 +114,7 @@ export function Budzet({
    */
   function zmienSklep(nowy: string) {
     ustawSklep(nowy);
+    ustawMimoOstrzezenia(false);
     if (kategoriaRecznie) return;
     const z = kategoriaSklepu(wydatki, nowy);
     if (z) ustawKategorie(z);
@@ -109,11 +126,18 @@ export function Budzet({
     ustawSklep(k.sklep ?? '');
     ustawKategorie(k.kategoria ?? KATEGORIA_DOMYSLNA);
     ustawKategorieRecznie(true);
+    ustawMimoOstrzezenia(false);
     poleKwoty.current?.focus();
   }
 
   function zapisz() {
     if (!poprawna) return;
+    /* Ostrzeżenie zatrzymuje pierwszy raz, nie blokuje na stałe: bywa, że
+       koszt firmy naprawdę poszedł z prywatnej karty i musi być zapisany. */
+    if (ostrzezenie && !mimoOstrzezenia) {
+      ustawMimoOstrzezenia(true);
+      return;
+    }
     dodaj(liczba, opis.trim() || 'Wydatek', kategoria, sklep, data);
     ustawKwote('');
     ustawOpis('');
@@ -121,6 +145,7 @@ export function Budzet({
     ustawDate(dzisiaj());
     ustawKategorie(KATEGORIA_DOMYSLNA);
     ustawKategorieRecznie(false);
+    ustawMimoOstrzezenia(false);
     poleKwoty.current?.focus();
   }
 
@@ -148,6 +173,13 @@ export function Budzet({
         <div className="wiersz">
           <span className="opis">Dziennie przez najbliższe {dniZostalo} dni</span>
           <span className="wartosc">{zl(naDzien)}</span>
+        </div>
+      )}
+
+      {firmoweWTym > 0 && (
+        <div className="wiersz">
+          <span className="opis">Poza budżetem — koszty firmy</span>
+          <span className="wartosc">{zl(firmoweWTym)}</span>
         </div>
       )}
 
@@ -199,6 +231,7 @@ export function Budzet({
           onChange={(e) => {
             ustawKategorie(e.target.value);
             ustawKategorieRecznie(true);
+            ustawMimoOstrzezenia(false);
           }}
           aria-label="Kategoria wydatku"
           style={{ flex: '2 1 150px' }}
@@ -233,9 +266,16 @@ export function Budzet({
           style={{ flex: '1 1 140px' }}
         />
         <button className="przycisk" disabled={!poprawna} onClick={zapisz}>
-          Dodaj
+          {mimoOstrzezenia ? 'Dodaj mimo to' : 'Dodaj'}
         </button>
       </div>
+
+      {ostrzezenie && (
+        <p className="notka ostrzezenie" style={{ marginTop: 8 }}>
+          {ostrzezenie}
+          {mimoOstrzezenia && ' Kliknij jeszcze raz, żeby zapisać.'}
+        </p>
+      )}
 
       {podpowiedziSklepu.length > 0 && (
         <div className="chipy">

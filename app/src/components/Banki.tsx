@@ -14,25 +14,12 @@ import {
 } from '@/lib/plan';
 import { usePlan } from '@/lib/PlanKontekst';
 import { Karta } from './Karta';
+import { PasekPostepu, PrzyciskKroku } from './Checklista';
 import { KrokiMiesiaca } from './KrokiMiesiaca';
 import { Daty } from './Daty';
 import { zl, dni, odmiana } from '@/lib/format';
 
 type Kroki = Record<string, Record<string, boolean>>;
-
-function Ptaszek() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-      <path
-        d="M2 6.4L4.7 9L10 3"
-        stroke="#1b2416"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 /**
  * Ile pieniędzy wisi w bankach i kiedy wpada najbliższa transza.
@@ -111,9 +98,7 @@ function KartaPromocji({
         {promocja.konto && ` · ${promocja.konto}`}
       </p>
 
-      <div className="pasek-krokow" aria-hidden="true">
-        <span style={{ width: `${(zebrane / promocja.wyplaty.length) * 100}%` }} />
-      </div>
+      <PasekPostepu zrobione={zebrane} wszystkie={promocja.wyplaty.length} />
       <p className="hero-podpis">
         {zebrane} z {promocja.wyplaty.length}{' '}
         {odmiana(promocja.wyplaty.length, 'transza', 'transze', 'transz')} odebrane
@@ -170,18 +155,11 @@ function Harmonogram({
         const spoznona = !odebrana && zostalo < 0;
 
         return (
-          <button
+          <PrzyciskKroku
             key={w.id}
-            className="krok"
-            data-zrobione={odebrana}
-            onClick={() => przelacz(miesiacWyplaty(w), w.id)}
-            aria-pressed={odebrana}
+            zrobione={odebrana}
+            przelacz={() => przelacz(miesiacWyplaty(w), w.id)}
           >
-            <span className="pole">
-              <Ptaszek />
-            </span>
-
-            <span className="tresc">
               <span className="krok-glowka">
                 <span className="tytul">{w.bank}</span>
                 <span className="mono kwota-znacznik">{zl(w.kwota)}</span>
@@ -203,8 +181,7 @@ function Harmonogram({
                   Sprawdź konto. Jeśli nie wpłynęło — reklamacja u banku.
                 </span>
               )}
-            </span>
-          </button>
+          </PrzyciskKroku>
         );
       })}
       </div>

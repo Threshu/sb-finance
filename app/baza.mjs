@@ -97,11 +97,58 @@ const projectId = JSON.parse(readFileSync(sciezkaProjektu, 'utf8')).projects.def
 initializeApp({ credential: applicationDefault(), projectId });
 const db = getFirestore();
 
-/* Lista kategorii wyciągana ze źródła prawdy, czyli z kategorie.ts.
-   Duplikowanie jej tutaj skończyłoby się rozjazdem przy pierwszej zmianie. */
+/* ── Czytanie z kategorie.ts ────────────────────────────────
+   Wiersz poleceń nie ma buildu, więc nie zaimportuje modułu TypeScriptu —
+   czyta go jako tekst. Plik wczytujemy raz, a każdy wzorzec, który nic nie
+   znajdzie, przerywa pracę z komunikatem. Cicha pusta lista byłaby gorsza
+   niż błąd: `slowaFirmowe()` pilnuje, żeby ZUS nie wpadł do budżetu, więc
+   po zmianie nazwy stałej zapis przechodziłby bez ostrzeżenia. */
+
+let zrodloKategorii;
+function kategorieTS() {
+  zrodloKategorii ??= readFileSync(new URL('./src/lib/kategorie.ts', import.meta.url), 'utf8');
+  return zrodloKategorii;
+}
+
+function wymagaj(wartosc, co) {
+  if (!wartosc || wartosc.length === 0) {
+    throw new Error(`Nie udało się odczytać ${co} z src/lib/kategorie.ts — zmieniła się nazwa albo kształt zapisu.`);
+  }
+  return wartosc;
+}
+
+/** Identyfikatory kategorii wydatków. */
 function znaneKategorie() {
-  const zrodlo = readFileSync(new URL('./src/lib/kategorie.ts', import.meta.url), 'utf8');
-  return [...zrodlo.matchAll(/\{\s*id:\s*'([a-z-]+)'/g)].map((m) => m[1]);
+  return wymagaj(
+    [...kategorieTS().matchAll(/\{\s*id:\s*'([a-z-]+)'/g)].map((m) => m[1]),
+    'listy kategorii',
+  );
+}
+
+/**
+ * Kategorie poza budżetem bieżącym. W tablicy stoją nazwy stałych
+ * (`KATEGORIA_FUNDUSZ`), więc trzeba je jeszcze rozwinąć w wartości.
+ */
+function pozaBudzetem() {
+  const zrodlo = kategorieTS();
+  const stale = Object.fromEntries(
+    [...zrodlo.matchAll(/const (KATEGORIA_[A-Z_]+) = '([a-z-]+)'/g)].map((m) => [m[1], m[2]]),
+  );
+  const blok = wymagaj(zrodlo.match(/POZA_BUDZETEM: string\[] = \[([^\]]*)\]/), 'listy POZA_BUDZETEM');
+  return blok[1]
+    .split(',')
+    .map((cz) => cz.trim())
+    .filter(Boolean)
+    .map((cz) => stale[cz] ?? cz.replace(/'/g, ''));
+}
+
+/** Słowa, po których wpis wygląda na obciążenie firmowe. */
+function slowaFirmowe() {
+  const blok = wymagaj(kategorieTS().match(/SLOWA_FIRMOWE = \[([^\]]*)\]/), 'listy SLOWA_FIRMOWE');
+  return wymagaj(
+    [...blok[1].matchAll(/'([^']+)'/g)].map((m) => m[1]),
+    'słów w SLOWA_FIRMOWE',
+  );
 }
 
 /** Apka jest jednoosobowa, więc w kolekcji stoi dokładnie jeden dokument. */
@@ -161,6 +208,21 @@ async function wydatki(klucz) {
 
   const suma = snap.docs.reduce((s, d) => s + d.data().kwota, 0);
   console.log(`\n${snap.size} pozycji, razem ${suma.toFixed(2)} zł`);
+
+  /* Apka liczy budżet bez `fundusz` i `firma`. Gdyby wiersz poleceń pokazywał
+     samą sumę wszystkiego, obie strony podawałyby inną liczbę za ten sam
+     miesiąc — a to jest dokładnie ten rodzaj rozjazdu, przez który przestało
+     się ufać plikom lokalnym. */
+  const poza = snap.docs
+    .map((d) => d.data())
+    .filter((w) => pozaBudzetem().includes(w.kategoria));
+  if (poza.length) {
+    const ile = poza.reduce((s, w) => s + w.kwota, 0);
+    console.log(
+      `w tym poza budżetem (${poza.map((w) => w.kategoria).filter((k, i, t) => t.indexOf(k) === i).join(', ')}): ` +
+        `${ile.toFixed(2)} zł — z budżetu bieżącego ${(suma - ile).toFixed(2)} zł`,
+    );
+  }
 }
 
 async function wplaty(klucz) {
@@ -303,6 +365,25 @@ function sprawdzWydatek(wpis, kategorie, gdzie = 'wpis') {
   const data = wpis.data ?? new Date().toISOString().slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
     throw new Error(`${gdzie}: data "${data}" — oczekiwano RRRR-MM-DD.`);
+  }
+
+  /* Podatki, ZUS i koszty JDG schodzą z konta firmowego, zanim powstanie
+     budżet. Wpisane jako wydatek liczą się drugi raz. Blokada jest miękka —
+     koszt firmy potrafi pójść z prywatnej karty — ale wymaga powiedzenia
+     tego wprost, bo inaczej wpada tu z rozpędu. */
+  const slowa = slowaFirmowe();
+  const trafienie = slowa.length
+    ? new RegExp(`\\b(${slowa.join('|')})\\b`, 'i').exec(`${wpis.opis} ${wpis.sklep ?? ''}`)
+    : null;
+  if (trafienie && wpis.kategoria !== 'firma' && !wpis.mimoOstrzezenia) {
+    throw new Error(
+      [
+        `${gdzie}: „${trafienie[0]}” wygląda na obciążenie firmowe.`,
+        'Budżet bieżący nie obejmuje podatków, ZUS-u ani kosztów JDG — schodzą wcześniej z konta firmowego.',
+        'Jeśli to naprawdę poszło z konta osobistego, dopisz "kategoria":"firma" — wtedy wpis stoi poza budżetem.',
+        'Jeśli wiesz, co robisz, dopisz "mimoOstrzezenia":true.',
+      ].join('\n'),
+    );
   }
 
   const w = {

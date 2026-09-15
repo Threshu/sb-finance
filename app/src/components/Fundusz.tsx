@@ -2,9 +2,9 @@
 
 import { usePlan } from '@/lib/PlanKontekst';
 import { Karta } from './Karta';
-import { zl, zlDokladnie } from '@/lib/format';
+import { zl, zlDokladnie, odmiana } from '@/lib/format';
 import { kluczMiesiacaWydatku, stanFunduszu, funduszowe, type Wydatek } from '@/lib/zakupy';
-import { kluczMiesiaca } from '@/lib/plan';
+import { kluczMiesiaca, nazwaMiesiaca, skladkaFunduszu } from '@/lib/plan';
 
 /**
  * Fundusz nieregularny — subkonto na dentystę, opony, sprzęt, prezenty.
@@ -15,23 +15,32 @@ import { kluczMiesiaca } from '@/lib/plan';
  * „ile uzbierałeś", tylko czy saldo trzyma się przedziału, w którym fundusz
  * robi swoje.
  */
-export function Fundusz({ wydatki, usun }: { wydatki: Wydatek[]; usun: (id: string) => void }) {
+export function Fundusz({
+  wydatki,
+  kroki,
+  usun,
+}: {
+  wydatki: Wydatek[];
+  /** Odhaczone kroki wszystkich miesięcy — z nich liczą się wpłacone składki. */
+  kroki: Record<string, Record<string, boolean>>;
+  usun: (id: string) => void;
+}) {
   const plan = usePlan();
-  const { saldo, skladki, wplacone, wydane } = stanFunduszu(
+  const biezacy = kluczMiesiaca(new Date());
+  const { saldo, startowe, skladki, wplacone, wydane, zalegle, biezacyZrobiony } = stanFunduszu(
     wydatki,
-    plan.funduszNieregularny,
-    plan.start,
+    plan,
+    kroki,
   );
 
+  const skladka = skladkaFunduszu(plan, biezacy);
   const poziomRoboczy = plan.funduszPoziomRoboczy ?? 0;
   // Rok składek. Trwałe przekroczenie znaczy, że składka jest za wysoka —
   // wtedy nadwyżka powinna iść na poduszkę, a nie leżeć tutaj.
-  const sufit = plan.funduszNieregularny * 12;
+  const sufit = skladka * 12;
 
   const zaMalo = poziomRoboczy > 0 && saldo < poziomRoboczy;
   const zaDuzo = saldo > sufit;
-
-  const biezacy = kluczMiesiaca(new Date());
   const wTymMiesiacu = funduszowe(wydatki).filter((w) => kluczMiesiacaWydatku(w) === biezacy);
   const ostatnie = funduszowe(wydatki).slice(0, 6);
 
@@ -40,7 +49,7 @@ export function Fundusz({ wydatki, usun }: { wydatki: Wydatek[]; usun: (id: stri
       id="fundusz"
       tytul="Fundusz nieregularny"
       opoznienie={280}
-      dodatek={<span className="mono licznik">{zl(plan.funduszNieregularny)}/mies</span>}
+      dodatek={<span className="mono licznik">{zl(skladka)}/mies</span>}
     >
       <div className="hero-kwota" style={{ marginBottom: 0 }}>
         <span className="duza" style={{ fontSize: 'clamp(28px, 8vw, 38px)' }}>{zl(saldo)}</span>
@@ -53,10 +62,20 @@ export function Fundusz({ wydatki, usun }: { wydatki: Wydatek[]; usun: (id: stri
         </div>
       )}
 
+      {startowe > 0 && (
+        <div className="wiersz">
+          <span className="opis">
+            <span className="glowny">Saldo otwarcia</span>
+            co leżało na subkoncie przed startem planu
+          </span>
+          <span className="wartosc">{zl(startowe)}</span>
+        </div>
+      )}
+
       <div className="wiersz">
         <span className="opis">
           <span className="glowny">Wpłacone</span>
-          {skladki} {skladki === 1 ? 'składka' : 'składki'} po {zl(plan.funduszNieregularny)}
+          {skladki} {odmiana(skladki, 'składka', 'składki', 'składek')} — liczone z odhaczonych przelewów
         </span>
         <span className="wartosc">{zl(wplacone)}</span>
       </div>
@@ -95,11 +114,26 @@ export function Fundusz({ wydatki, usun }: { wydatki: Wydatek[]; usun: (id: stri
         </div>
       )}
 
+      {!biezacyZrobiony && (
+        <p className="notka ostrzezenie">
+          Składka za {nazwaMiesiaca(biezacy)} ({zl(skladka)}) nie jest jeszcze w saldzie. Wejdzie,
+          gdy odhaczysz przelew na fundusz w Rozdysponowaniu — ptaszek jest tu jedynym dowodem, że
+          pieniądze faktycznie poszły na subkonto.
+        </p>
+      )}
+
+      {zalegle.length > 0 && (
+        <p className="notka ostrzezenie">
+          Bez odhaczonego przelewu: {zalegle.map(nazwaMiesiaca).join(', ')}. Jeśli przelew się odbył,
+          odhacz go w tamtym miesiącu; jeśli nie — saldo jest poprawne i tyle na subkoncie leży.
+        </p>
+      )}
+
       <p className="notka">
         {zaMalo
-          ? `Poniżej poziomu roboczego ${zl(poziomRoboczy)} — tyle wynosi twój największy pojedynczy wydatek nieregularny z historii. Do tego czasu przelewaj pełne ${zl(plan.funduszNieregularny)}.`
+          ? `Poniżej poziomu roboczego ${zl(poziomRoboczy)} — tyle wynosi twój największy pojedynczy wydatek nieregularny z historii. Do tego czasu przelewaj pełne ${zl(skladka)}.`
           : zaDuzo
-            ? `Powyżej rocznej sumy składek (${zl(sufit)}). To znaczy, że ${zl(plan.funduszNieregularny)} miesięcznie jest za dużo — obniż składkę, a różnicę przelewaj na poduszkę.`
+            ? `Powyżej rocznej sumy składek (${zl(sufit)}). To znaczy, że ${zl(skladka)} miesięcznie jest za dużo — obniż składkę, a różnicę przelewaj na poduszkę.`
             : `Saldo w przedziale roboczym. Fundusz ma falować, nie rosnąć: jeśli po roku stale przyrasta, składka jest za wysoka i nadwyżka powinna iść na poduszkę.`}
       </p>
     </Karta>

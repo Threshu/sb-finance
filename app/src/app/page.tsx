@@ -9,7 +9,6 @@ import { DostawcaZwiniec } from '@/lib/ZwinieciaKontekst';
 import { kluczMiesiaca } from '@/lib/plan';
 import { EkranLogowania, EkranBrakPlanu } from '@/components/Brama';
 import { Miernik } from '@/components/Miernik';
-import { Przeplyw } from '@/components/Przeplyw';
 import { Rozdysponowanie } from '@/components/Rozdysponowanie';
 import { Kamienie } from '@/components/Kamienie';
 import { Wplaty } from '@/components/Wplaty';
@@ -153,7 +152,6 @@ export default function Strona() {
                   usun={usunWydatek}
                 />
                 <Miernik saldo={saldo(plan, stan)} />
-                <Przeplyw />
               </div>
 
               <div className="kolumna">
@@ -161,7 +159,7 @@ export default function Strona() {
                   kroki={stan.kroki[klucz] ?? {}}
                   przelacz={(krokId) => przelaczKrok(klucz, krokId)}
                   funduszPelny={
-                    stanFunduszu(stan.wydatki, plan.funduszNieregularny, plan.start).saldo >=
+                    stanFunduszu(stan.wydatki, plan, stan.kroki).saldo >=
                     (plan.funduszPoziomRoboczy ?? Infinity)
                   }
                 />
@@ -170,7 +168,7 @@ export default function Strona() {
 
               <div className="kolumna">
                 <Kamienie saldo={saldo(plan, stan)} />
-                <Fundusz wydatki={stan.wydatki} usun={usunWydatek} />
+                <Fundusz wydatki={stan.wydatki} kroki={stan.kroki} usun={usunWydatek} />
                 <Daty />
               </div>
             </div>

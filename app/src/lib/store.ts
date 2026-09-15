@@ -180,15 +180,23 @@ export function useStan() {
      nie ma dokąd pisać, więc zapisy po prostu nic nie robią — panel
      i tak się wtedy nie renderuje. */
 
+  /**
+   * Wpłata na poduszkę. `data` jest opcjonalna, ale potrzebna: przelew
+   * robi się przy rozdysponowaniu, a wpisuje wieczorem albo nazajutrz —
+   * bez tego pola każda wpłata siadałaby na dniu wpisania i miesiąc
+   * zamykałby się z przesuniętą historią.
+   */
   const dodajWplate = useCallback(
-    (kwota: number, opis: string, zrodlo: ZrodloWplaty) => {
+    (kwota: number, opis: string, zrodlo: ZrodloWplaty, data?: string) => {
       if (!uid) return;
       const w: Wplata = {
         id: id(),
-        data: new Date().toISOString().slice(0, 10),
+        data: data || new Date().toISOString().slice(0, 10),
         kwota,
         zrodlo,
         opis,
+        // Nie to samo co `data`: mówi, kiedy wpis trafił do bazy, i ustala
+        // kolejność wpłat z tego samego dnia.
         dodano: new Date().toISOString(),
       };
       void zapiszPozycje(uid, 'wplaty', w.id, w);

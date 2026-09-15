@@ -10,7 +10,11 @@ const config = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-/** Firebase jest opcjonalny — bez konfiguracji apka działa na localStorage. */
+/**
+ * Czy w ogóle jest dokąd pisać. Bez konfiguracji apka pokazuje ekran
+ * logowania i nic więcej — drugiej ścieżki (stan w przeglądarce) nie ma
+ * od czasu, gdy plan przeniósł się do Firestore.
+ */
 export const firebaseWlaczony = Boolean(config.apiKey && config.projectId);
 
 let app: FirebaseApp | null = null;
