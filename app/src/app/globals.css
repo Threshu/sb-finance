@@ -1248,6 +1248,18 @@ input[type='date'] { color-scheme: dark; }
   column-gap: 22px;
 }
 
+/* Element siatki ma domyślnie min-width: auto, więc najdłuższe słowo w środku
+   rozpycha kolumnę i tekst wychodzi na sąsiednią. */
+.lista-wyplat > .krok { min-width: 0; }
+
+/* Plakietka „za co" jest gdzie indziej krótka („za listopad") i nowrap trzyma ją
+   w jednym kawałku. W harmonogramie bywa całym zdaniem — tutaj musi się łamać. */
+.lista-wyplat .kiedy {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
 /* Kreska pod ostatnią pozycją w kolumnie wisiałaby w powietrzu — przy siatce
    „ostatni w DOM" i „ostatni w kolumnie" to dwie różne rzeczy. */
 .lista-wyplat .krok:last-of-type { border-bottom: 1px solid var(--line-soft); }
