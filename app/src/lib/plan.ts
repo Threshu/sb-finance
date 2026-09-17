@@ -79,6 +79,14 @@ export type Promocja = {
   do?: string;
   /** Co trzeba zrobić w każdym miesiącu okna. Krótkie hasła, nie zdania. */
   warunki: string[];
+  /**
+   * Co podnosi wypłatę, ale warunkiem nie jest — np. zwrot 10% od zakupów
+   * kartą. Na jednej liście z warunkami takie hasło czyta się jak obowiązek
+   * i wymusza wydatki, których regulamin nie wymaga: „2 500 zł kartą" przy
+   * ING brało się za warunek premii, a jest tylko sufitem zwrotu. Pominięcie
+   * okazji kosztuje dokładnie tyle, ile zwrotu nie wpadnie — nic więcej.
+   */
+  okazje?: string[];
   /** Rzecz, o której łatwo zapomnieć — np. do kiedy nie wolno zamknąć konta. */
   uwaga?: string;
   wyplaty: WyplataPromocji[];
@@ -346,6 +354,9 @@ export function sprawdzPlan(dane: unknown): WynikSprawdzenia {
           bledy.push(`${gdzie}: wymagane są „id", „bank" i „nazwa".`);
         }
         if (!Array.isArray(pr?.warunki)) bledy.push(`${gdzie}: „warunki" muszą być listą.`);
+        if (pr?.okazje !== undefined && !Array.isArray(pr.okazje)) {
+          bledy.push(`${gdzie}: „okazje" muszą być listą.`);
+        }
         if (!Array.isArray(pr?.wyplaty)) {
           bledy.push(`${gdzie}: „wyplaty" muszą być listą.`);
           continue;

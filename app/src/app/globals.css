@@ -1232,6 +1232,26 @@ input[type='date'] { color-scheme: dark; }
   background: var(--raised);
 }
 
+/* Okazje to nie obowiązki. Ten sam układ listy, ale zielona kropka i cichszy
+   tekst: brązowa kropka znaczy „zrób albo tracisz premię", zielona — „tyle
+   jeszcze leży do wzięcia". Bez tego rozróżnienia sufit zwrotu z karty
+   wyglądał na twardy warunek i wymuszał wydatki. */
+.warunki.okazje li {
+  color: var(--dim);
+}
+
+.warunki.okazje li::before {
+  background: var(--sage);
+}
+
+.warunki.okazje li[data-nieaktywna='true'] {
+  color: var(--faint);
+}
+
+.warunki.okazje li[data-nieaktywna='true']::before {
+  background: var(--raised);
+}
+
 .karta > .karta-tresc .uwaga {
   display: block;
   font-size: var(--fs-xs);

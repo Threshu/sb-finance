@@ -80,6 +80,7 @@ function KartaPromocji({
   const aktywna = promocjaAktywna(promocja, klucz);
   const { kwota, sztuk } = zostaloZPromocji(promocja, kroki);
   const zebrane = promocja.wyplaty.length - sztuk;
+  const okazje = promocja.okazje ?? [];
 
   // Przed startem okna warunków nie ma czego pilnować — a to najczęstsze
   // źródło paniki: konto założone we wrześniu, warunki biegną od października.
@@ -120,6 +121,23 @@ function KartaPromocji({
           ))}
         </ul>
       </div>
+
+      {/* Okazje osobno, pod warunkami. Wrzucone na jedną listę czytały się jak
+          obowiązek — a niewyciśnięty zwrot z karty nie odbiera premii, tylko
+          nie dochodzi. Przy pięciu bankach ta różnica decyduje, na co
+          faktycznie wydać miesiąc. */}
+      {okazje.length > 0 && (
+        <div className="faza">
+          <span className="faza-tytul">Nie warunek — tyle można dobrać</span>
+          <ul className="warunki okazje">
+            {okazje.map((o, i) => (
+              <li key={i} data-nieaktywna={!aktywna}>
+                {o}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {promocja.uwaga && <p className="uwaga">{promocja.uwaga}</p>}
     </Karta>
