@@ -40,6 +40,16 @@ export type KrokMiesiaca = {
   /** Okno obowiązywania, RRRR-MM. Promocje bankowe mają daty ważności. */
   od?: string;
   do?: string;
+  /**
+   * Nazwa fazy w Rozdysponowaniu, gdy ten krok ma być widoczny także tam.
+   *
+   * Przelewy pod promocje (1 000 zł na Alior, BNP, ING) robi się tego samego
+   * dnia co przelewy z firmowego, ale pilnuje ich zakładka Banki — razem
+   * z warunkami i harmonogramem wypłat. Zamiast wpisywać je w plan dwa razy,
+   * ten sam krok pokazuje się w obu miejscach: jedno `id`, jeden ptaszek,
+   * jeden dokument `kroki/{RRRR-MM}`. Odhaczenie tu i tam to ta sama zmiana.
+   */
+  wRozdysponowaniu?: string;
 };
 
 /**
@@ -88,6 +98,16 @@ export type Obciazenie = {
   nazwa: string;
   kwota: number;
   termin: string;
+  /**
+   * Kiedy ta kwota realnie wychodzi z konta — a nie kiedy się „należy".
+   *
+   *   'rezerwa' (domyślne) — płacisz ręcznie na początku NASTĘPNEGO miesiąca,
+   *      po mailu z biura z twardymi kwotami. 15. odkładasz na to rezerwę.
+   *   'automat' — schodzi samo, bez twojego udziału (abonament księgowości
+   *      na koniec miesiąca). Do rezerwy nie wchodzi, bo nie ma jej po co
+   *      przelewać — zostaje na koncie, z którego pobiera je dostawca.
+   */
+  platne?: 'rezerwa' | 'automat';
   /**
    * Okno obowiązywania, RRRR-MM. Składka, która wchodzi dopiero za dwa
    * miesiące, tylko zaśmieca przepływ — a gdy wejdzie, ma się pojawić sama.
@@ -139,8 +159,22 @@ export type KrokRozdysponowania = {
    *   'budzet'     — budżet miesiąca, razem z `budzetyWyjatki`
    *   'fundusz'    — składka na fundusz nieregularny
    *   'obciazenie' — obciążenie z przepływu, wskazane polem `obciazenie`
+   *   'rezerwa'    — suma obciążeń miesiąca płatnych ręcznie, czyli tyle,
+   *                  ile trzeba odłożyć 15. na podatki płacone za trzy
+   *                  tygodnie. Nie stoi nigdzie wpisana: zmiana stawki
+   *                  ryczałtu przestawia ją sama.
    */
-  kwotaZ?: 'budzet' | 'fundusz' | 'obciazenie';
+  kwotaZ?: 'budzet' | 'fundusz' | 'obciazenie' | 'rezerwa';
+  /**
+   * Przy `kwotaZ: 'obciazenie'` — weź kwotę z POPRZEDNIEGO miesiąca.
+   *
+   * Podatki płaci się za miesiąc zamknięty: mail z biura przychodzi
+   * na początku następnego miesiąca i dopiero wtedy idzie przelew.
+   * W listopadzie płacisz więc ryczałt za październik, nie za listopad.
+   * Bez tego pola krok pokazywałby stawkę o miesiąc do przodu — a stawki
+   * w planie zmieniają się w oknach `od`/`do`, więc różnica bywa spora.
+   */
+  zaPoprzedniMiesiac?: boolean;
   /**
    * Ułamek reszty przy `kwota: null` — np. 0.25 na część płynną poduszki
    * i 0.75 na obligacje. Dzielona jest reszta, nie planowana wpłata, więc
@@ -159,7 +193,8 @@ export type KrokRozdysponowania = {
 };
 
 export type Rozdysponowanie = {
-  wyzwalacz: string;
+  /** Zdanie nad listą: co uruchamia tę checklistę. Pole opcjonalne. */
+  wyzwalacz?: string;
   kroki: KrokRozdysponowania[];
 };
 
@@ -323,12 +358,37 @@ export function sprawdzPlan(dane: unknown): WynikSprawdzenia {
           bledy.push(`Krok „${k.id}": „udzial" musi być ułamkiem z przedziału (0, 1].`);
         }
       }
+      if (k.zaPoprzedniMiesiac && k.kwotaZ !== 'obciazenie') {
+        bledy.push(
+          `Krok „${k.id}": „zaPoprzedniMiesiac" działa tylko przy „kwotaZ: obciazenie".`,
+        );
+      }
       if (k.kwotaZ !== 'obciazenie') continue;
       if (!k.obciazenie) {
         bledy.push(`Krok „${k.id}": przy „kwotaZ: obciazenie" trzeba podać pole „obciazenie".`);
       } else if (!nazwy.has(k.obciazenie)) {
         bledy.push(`Krok „${k.id}": w przepływie nie ma obciążenia „${k.obciazenie}".`);
       }
+    }
+
+    /* Krok miesiąca dopięty do Rozdysponowania wskazuje fazę po nazwie.
+       Literówka nie wywala apki — przelew ląduje w osobnej grupie na dole
+       listy, pod nagłówkiem, którego nikt nie planował. Łatwiej złapać tutaj. */
+    const fazy = new Set(rozdysponowanie.kroki.map((k) => k.faza));
+    for (const k of Array.isArray(p.krokiMiesiaca) ? (p.krokiMiesiaca as KrokMiesiaca[]) : []) {
+      if (k?.wRozdysponowaniu && !fazy.has(k.wRozdysponowaniu)) {
+        bledy.push(
+          `Krok „${k.id}": w rozdysponowaniu nie ma fazy „${k.wRozdysponowaniu}".`,
+        );
+      }
+    }
+  }
+
+  /* Obciążenie bez poprawnego „platne" po cichu wpadłoby do rezerwy
+     podatkowej albo z niej wypadło — a to jest kwota przelewu z 15. */
+  for (const o of przeplyw?.obciazenia ?? []) {
+    if (o?.platne !== undefined && o.platne !== 'rezerwa' && o.platne !== 'automat') {
+      bledy.push(`Obciążenie „${o?.nazwa}": „platne" musi być „rezerwa" albo „automat".`);
     }
   }
 
@@ -409,6 +469,12 @@ export function nazwaMiesiaca(klucz: string): string {
 export function nazwaDaty(iso: string): string {
   const d = new Date(iso + 'T00:00:00');
   return `${d.getDate()} ${MIESIACE[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Poprzedni miesiąc w formacie RRRR-MM. */
+export function poprzedniMiesiac(klucz: string): string {
+  const [rok, miesiac] = klucz.split('-').map(Number);
+  return kluczMiesiaca(new Date(rok, miesiac - 2, 1));
 }
 
 export function dniDo(iso: string, od: Date = new Date()): number {
@@ -625,6 +691,32 @@ export function krokiRozdysponowania(plan: Plan, klucz: string): KrokRozdysponow
   return plan.rozdysponowanie.kroki.filter((k) => wOknie(k, klucz));
 }
 
+/**
+ * Ile odłożyć 15. na podatki — suma obciążeń, które płacisz sam.
+ *
+ * Abonament księgowości (`platne: 'automat'`) schodzi z konta bez twojego
+ * udziału ostatniego dnia miesiąca, więc nie ma go po co przelewać na bok;
+ * zostaje tam, gdzie go pobiorą. Reszta — ryczałt, zdrowotna, ZUS — czeka
+ * trzy tygodnie na mail z twardymi kwotami i dopiero wtedy wychodzi.
+ */
+export function rezerwaPodatkowa(plan: Plan, klucz: string): number {
+  return obciazeniaMiesiaca(plan, klucz)
+    .filter((o) => o.platne !== 'automat')
+    .reduce((s, o) => s + o.kwota, 0);
+}
+
+/** Krok widoczny w Rozdysponowaniu: własny albo dopięty z kroków miesiąca. */
+export type KrokListyRozdysponowania = KrokRozdysponowania | KrokMiesiaca;
+
+/**
+ * Id kroku, którym odhaczasz przelew budżetowy — z planu, nie z kodu.
+ * Tak samo jak `krokFunduszu`: karta budżetu nie ma własnego ptaszka,
+ * tylko czyta ten sam, co Rozdysponowanie.
+ */
+export function krokBudzetu(plan: Plan): string | undefined {
+  return plan.rozdysponowanie.kroki.find((k) => k.kwotaZ === 'budzet')?.id;
+}
+
 /** Kroki rozdysponowania pogrupowane po fazie, z zachowaniem kolejności. */
 export function rozdysponowanieWgFaz(
   plan: Plan,
@@ -635,6 +727,33 @@ export function rozdysponowanieWgFaz(
     const ostatnia = grupy[grupy.length - 1];
     if (ostatnia && ostatnia.faza === krok.faza) ostatnia.kroki.push(krok);
     else grupy.push({ faza: krok.faza, kroki: [krok] });
+  }
+  return grupy;
+}
+
+/**
+ * To samo co `rozdysponowanieWgFaz`, plus kroki miesiąca oznaczone polem
+ * `wRozdysponowaniu` — dopięte do fazy o tej nazwie.
+ *
+ * Przelewy pod promocje bankowe robi się w ten sam dzień co przelewy
+ * z firmowego, więc muszą być na tej samej liście; warunki i harmonogram
+ * wypłat zostają w zakładce Banki. Krok jest jeden, `id` jedno, dokument
+ * `kroki/{RRRR-MM}` jeden — odhaczenie w którymkolwiek miejscu widać od razu
+ * w drugim. Skopiowanie kroku do obu list dawałoby dwa ptaszki na jeden
+ * przelew i cichy rozjazd liczników.
+ */
+export function fazyRozdysponowania(
+  plan: Plan,
+  klucz: string,
+): { faza: string; kroki: KrokListyRozdysponowania[] }[] {
+  const grupy: { faza: string; kroki: KrokListyRozdysponowania[] }[] =
+    rozdysponowanieWgFaz(plan, klucz).map((g) => ({ faza: g.faza, kroki: [...g.kroki] }));
+
+  for (const krok of krokiMiesiacaWOknie(plan, klucz)) {
+    if (!krok.wRozdysponowaniu) continue;
+    const grupa = grupy.find((g) => g.faza === krok.wRozdysponowaniu);
+    if (grupa) grupa.kroki.push(krok);
+    else grupy.push({ faza: krok.wRozdysponowaniu, kroki: [krok] });
   }
   return grupy;
 }

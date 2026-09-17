@@ -44,6 +44,10 @@ const ETYKIETY_OGOLNE = new Set([
   'budzet',
   'fundusz',
   'obciazenie',
+  'rezerwa',
+  // Wartość pola `platne` w obciążeniach — mówi, czy kwota schodzi sama,
+  // czy czeka na twój przelew. O nikim nic nie zdradza.
+  'automat',
   // Wartości pola `podstawa` w kamieniach milowych — nazwy pól planu,
   // z tego samego powodu co wyżej.
   'kosztyTwarde',

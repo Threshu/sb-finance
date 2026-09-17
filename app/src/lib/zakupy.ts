@@ -10,6 +10,7 @@
 import {
   kluczMiesiaca,
   miesiaceOd,
+  poprzedniMiesiac,
   skladkaFunduszu,
   type Plan,
 } from './plan';
@@ -23,6 +24,11 @@ import {
   TYPY,
   type TypWydatku,
 } from './kategorie';
+
+// Liczenie miesięcy mieszka w plan.ts — tam potrzebują go kroki podatkowe
+// („w listopadzie płacisz ryczałt za październik"). Tutaj tylko przechodzi
+// dalej, żeby komponenty miały jedno miejsce importu.
+export { poprzedniMiesiac };
 
 export type ZrodloWydatku = 'reczny' | 'import';
 
@@ -229,13 +235,6 @@ export function podsumujMiesiac(wydatki: Wydatek[], klucz: string): Podsumowanie
     wgKategorii,
     wgTypu,
   };
-}
-
-/** Poprzedni miesiąc w formacie RRRR-MM. */
-export function poprzedniMiesiac(klucz: string): string {
-  const [rok, miesiac] = klucz.split('-').map(Number);
-  const d = new Date(rok, miesiac - 2, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 export type Zmiana = {

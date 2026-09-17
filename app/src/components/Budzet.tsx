@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import {
   budzetDlaMiesiaca,
   kluczMiesiaca,
+  krokBudzetu,
 } from '@/lib/plan';
 import { usePlan } from '@/lib/PlanKontekst';
 import { Karta } from './Karta';
@@ -32,11 +33,14 @@ function dzisiaj(): string {
 export function Budzet({
   wydatki,
   wydane,
+  kroki,
   dodaj,
   usun,
 }: {
   wydatki: Wydatek[];
   wydane: number;
+  /** Odhaczone kroki tego miesiąca — stąd wiadomo, czy przelew już poszedł. */
+  kroki: Record<string, boolean>;
   dodaj: (
     kwota: number,
     opis: string,
@@ -92,6 +96,13 @@ export function Budzet({
   const ostrzezenie = ostrzezenieFirmowe(opis, sklep, kategoria);
 
   const budzet = budzetDlaMiesiaca(plan, klucz);
+  /* Budżet to nie to samo co pieniądze na koncie: liczba wyżej jest limitem
+     z planu, a limit stoi tam od pierwszego dnia miesiąca. Dopóki przelew
+     z firmowego nie poszedł, karta pokazuje, ile wolno wydać z pieniędzy,
+     których na osobistym jeszcze nie ma. Ten sam ptaszek co w Rozdysponowaniu
+     — nie ma tu drugiego miejsca do odhaczania. */
+  const idBudzetu = krokBudzetu(plan);
+  const przelewZrobiony = Boolean(idBudzetu && kroki[idBudzetu]);
   const zostalo = budzet - wydane;
   const procent = Math.min((wydane / budzet) * 100, 100);
   const przekroczony = wydane > budzet;
@@ -161,6 +172,13 @@ export function Budzet({
       <div className={`pasek${przekroczony ? ' przekroczony' : ''}`}>
         <span style={{ width: `${procent}%` }} />
       </div>
+
+      {!przelewZrobiony && (
+        <p className="notka ostrzezenie">
+          Przelew budżetowy ({zl(budzet)}) nie jest jeszcze odhaczony w Rozdysponowaniu. Limit
+          wyżej jest z planu, nie z konta — sprawdź, czy pieniądze faktycznie są na osobistym.
+        </p>
+      )}
 
       <div className="wiersz">
         <span className="opis">{przekroczony ? 'Przekroczone o' : 'Zostało do końca miesiąca'}</span>

@@ -148,6 +148,7 @@ export default function Strona() {
                 <Budzet
                   wydatki={stan.wydatki}
                   wydane={wydatkiMiesiaca(stan, klucz)}
+                  kroki={stan.kroki[klucz] ?? {}}
                   dodaj={dodajWydatek}
                   usun={usunWydatek}
                 />
@@ -158,6 +159,7 @@ export default function Strona() {
                 <Rozdysponowanie
                   kroki={stan.kroki[klucz] ?? {}}
                   przelacz={(krokId) => przelaczKrok(klucz, krokId)}
+                  wplaty={stan.wplaty}
                   funduszPelny={
                     stanFunduszu(stan.wydatki, plan, stan.kroki).saldo >=
                     (plan.funduszPoziomRoboczy ?? Infinity)
